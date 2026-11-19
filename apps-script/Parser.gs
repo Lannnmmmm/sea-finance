@@ -185,7 +185,7 @@ function parseSeaBankCoordinatePreview_(pages) {
   pages.forEach(function(page) {
     const items = page.items || [];
     const text = seaBankCoordinatePageText_(items);
-    const match = text.match(/S\\s*\\/\\s*N\\s*(S\\d{2}-\\d{6}[A-Z0-9]+)/i);
+    const match = text.match(/S\s*\/\s*N\s*(S\d{2}-\d{6}[A-Z0-9]+)/i);
     if (match) {
       if (!current || current.serial !== match[1]) {
         current = { serial: match[1], pages: [] };
@@ -195,7 +195,7 @@ function parseSeaBankCoordinatePreview_(pages) {
     if (current) current.pages.push(items);
   });
   const statements = groups.map(function(group) {
-    const text = group.pages.map(seaBankCoordinatePageText_).join('\\n');
+    const text = group.pages.map(seaBankCoordinatePageText_).join('\n');
     return parseSeaBankSinglePreview_(text, group.pages);
   });
   return combineSeaBankStatements_(statements);
@@ -219,8 +219,8 @@ function combineSeaBankStatements_(statements) {
 function seaBankCoordinatePageText_(items) {
   const rows = seaBankCoordinateRows_(items);
   return rows.map(function(row) {
-    return row.parts.map(function(part) { return part.text; }).join(' ').replace(/\\s+/g,' ').trim();
-  }).filter(Boolean).join('\\n');
+    return row.parts.map(function(part) { return part.text; }).join(' ').replace(/\s+/g,' ').trim();
+  }).filter(Boolean).join('\n');
 }
 
 function seaBankCoordinateRows_(items) {
@@ -247,7 +247,7 @@ function parseSeaBankCoordinateTransactions_(pages, periodStart) {
     rows.forEach(function(row) {
       const dateText = row.parts.filter(function(part) { return part.x < 110; })
         .map(function(part) { return part.text; }).join(' ').trim();
-      const match = dateText.match(/^(\\d{2})\\s+([A-Z]{3})$/i);
+      const match = dateText.match(/^(\d{2})\s+([A-Z]{3})$/i);
       if (match && monthMap[match[2].toUpperCase()] !== undefined) {
         anchors.push({ day:Number(match[1]), month:monthMap[match[2].toUpperCase()], y:row.y, row:row });
       }
@@ -259,7 +259,7 @@ function parseSeaBankCoordinateTransactions_(pages, periodStart) {
       const lowerBoundary = index === anchors.length-1 ? anchor.y - 26 : (anchor.y + nextY) / 2;
 
       const moneyParts = anchor.row.parts.filter(function(part) {
-        return part.x >= 280 && /\\d/.test(part.text);
+        return part.x >= 280 && /\d/.test(part.text);
       });
       const balancePart = moneyParts.filter(function(part) { return part.x >= 470; }).pop();
       const amountParts = moneyParts.filter(function(part) { return part.x >= 280 && part.x < 470; });
@@ -271,7 +271,7 @@ function parseSeaBankCoordinateTransactions_(pages, periodStart) {
         if (row.y > upperBoundary || row.y < lowerBoundary) return;
         row.parts.forEach(function(part) {
           if (part.x >= 110 && part.x < 280 && part.y <= anchor.y + 3.5 &&
-              part.text && !/BANK STATEMENT|^S\\s*\\/\\s*N/i.test(part.text)) {
+              part.text && !/BANK STATEMENT|^S\s*\/\s*N/i.test(part.text)) {
             cellParts.push(part);
           }
         });
@@ -281,7 +281,7 @@ function parseSeaBankCoordinateTransactions_(pages, periodStart) {
         return a.x-b.x;
       });
       const description = cellParts.map(function(part) { return part.text; })
-        .join(' ').replace(/\\s+/g,' ').trim();
+        .join(' ').replace(/\s+/g,' ').trim();
 
       const typeParts = [];
       rows.forEach(function(row) {
