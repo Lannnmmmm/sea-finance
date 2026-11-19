@@ -8,6 +8,52 @@ function parseSeaBankPreview(extractedText) {
   if (typeof extractedText !== 'string' || extractedText.trim().length < 100) {
     throw new Error('Teks PDF kosong atau terlalu pendek.');
   }
+  // PDF.js client must join each page with a form-feed character.
+  const pages = extractedText.split('\\f');
+  const groups = [];
+  let current = null;
+
+  pages.forEach(function(pageText) {
+    const match = pageText.match(/\\bS\\/N\\s+(S\\d{2}-\\d{6}[A-Z0-9]+)\\b/i);
+    if (!match) {
+      if (current) current.text += '\\n' + pageText;
+      return;
+    }
+    const serial = match[1];
+    if (!current || current.serial !== serial) {
+      current = { serial: serial, text: pageText };
+      groups.push(current);
+    } else {
+      current.text += '\\n' + pageText;
+    }
+  });
+
+  if (!groups.length) return parseSeaBankSinglePreview_(extractedText);
+  const statements = groups.map(function(group) {
+    return parseSeaBankSinglePreview_(group.text);
+  });
+  const seen = {};
+  const duplicateSerials = [];
+  statements.forEach(function(statement) {
+    if (statement.statementSerial) {
+      if (seen[statement.statementSerial]) duplicateSerials.push(statement.statementSerial);
+      seen[statement.statementSerial] = true;
+    }
+  });
+  return {
+    ok: statements.length > 0 && statements.every(function(s) { return s.ok; }) && duplicateSerials.length === 0,
+    status: statements.length > 0 && statements.every(function(s) { return s.ok; }) && duplicateSerials.length === 0 ? 'VALID' : 'REVIEW',
+    statementCount: statements.length,
+    duplicateSerials: duplicateSerials,
+    statements: statements,
+    errors: duplicateSerials.length ? ['Nomor seri statement terdeteksi lebih dari sekali.'] : []
+  };
+}
+
+function parseSeaBankSinglePreview_(extractedText) {
+  if (typeof extractedText !== 'string' || extractedText.trim().length < 100) {
+    throw new Error('Teks PDF kosong atau terlalu pendek.');
+  }
 
   const text = extractedText.replace(/\u00a0/g, ' ').replace(/[\r\t]+/g, ' ');
   const lines = text.split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
