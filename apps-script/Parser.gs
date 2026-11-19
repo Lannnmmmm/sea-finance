@@ -8,15 +8,16 @@ function parseSeaBankPreview(extractedText) {
   if (typeof extractedText !== 'string' || extractedText.trim().length < 100) {
     throw new Error('Teks PDF kosong atau terlalu pendek.');
   }
+
   // PDF.js client must join each page with a form-feed character.
-  const pages = extractedText.split('\\f');
+  const pages = extractedText.split('\f');
   const groups = [];
   let current = null;
 
   pages.forEach(function(pageText) {
-    const match = pageText.match(/\\bS\\/N\\s+(S\\d{2}-\\d{6}[A-Z0-9]+)\\b/i);
+    const match = pageText.match(/\bS\/N\s+(S\d{2}-\d{6}[A-Z0-9]+)\b/i);
     if (!match) {
-      if (current) current.text += '\\n' + pageText;
+      if (current) current.text += '\n' + pageText;
       return;
     }
     const serial = match[1];
@@ -24,7 +25,7 @@ function parseSeaBankPreview(extractedText) {
       current = { serial: serial, text: pageText };
       groups.push(current);
     } else {
-      current.text += '\\n' + pageText;
+      current.text += '\n' + pageText;
     }
   });
 
