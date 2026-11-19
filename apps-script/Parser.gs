@@ -285,7 +285,7 @@ function parseSeaBankCoordinateTransactions_(pages, periodStart) {
 
       const typeParts = [];
       rows.forEach(function(row) {
-        if (row.y > anchor.y + 3.5 || row.y > upperBoundary || row.y < lowerBoundary) return;
+        if (row.y > upperBoundary || row.y < lowerBoundary) return;
         row.parts.forEach(function(part) {
           if (part.x >= 110 && part.x < 280 && part.y > anchor.y + 3.5 &&
               transactionTypes.test(part.text)) typeParts.push(part.text);
