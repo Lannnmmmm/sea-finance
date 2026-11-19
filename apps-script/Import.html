@@ -133,27 +133,18 @@
     for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
       const page = await pdf.getPage(pageNo);
       const content = await page.getTextContent();
-      const rows = [];
-
-      content.items.forEach(function(item) {
-        if (!item.str || !item.str.trim()) return;
-        const y = Math.round(item.transform[5] * 2) / 2;
-        let row = rows.find(function(r) { return Math.abs(r.y - y) <= 1.5; });
-        if (!row) {
-          row = { y: y, parts: [] };
-          rows.push(row);
-        }
-        row.parts.push({ x: item.transform[4], text: item.str.trim() });
+      const items = content.items.filter(function(item) {
+        return item.str && item.str.trim();
+      }).map(function(item) {
+        return {
+          x: Number(item.transform[4]),
+          y: Number(item.transform[5]),
+          text: item.str.trim()
+        };
       });
-
-      rows.sort(function(a,b) { return b.y - a.y; });
-      const lines = rows.map(function(row) {
-        return row.parts.sort(function(a,b) { return a.x - b.x; })
-          .map(function(part) { return part.text; }).join(' ').replace(/\s+/g, ' ').trim();
-      }).filter(Boolean);
-      pages.push(lines.join('\n'));
+      pages.push({ pageNo: pageNo, items: items });
     }
-    return pages.join('\f');
+    return { format: 'seabank-coordinate-v1', pages: pages };
   }
 
   async function previewPdf() {
@@ -171,8 +162,11 @@
     document.getElementById('results').hidden = true;
     try {
       setStatus('Mengekstrak teks PDF…');
-      const text = await extractPdfText(file);
-      if (text.replace(/\s/g, '').length < 100) {
+      const extracted = await extractPdfText(file);
+      const textLength = extracted.pages.reduce(function(total, page) {
+        return total + page.items.reduce(function(sum, item) { return sum + item.text.length; }, 0);
+      }, 0);
+      if (textLength < 100) {
         throw new Error('PDF tidak memiliki teks yang dapat dibaca. File scan memerlukan OCR.');
       }
       setStatus('Teks berhasil diekstrak. Mengirim ke parser…');
@@ -182,7 +176,7 @@
           setStatus('Parser gagal: ' + (err && err.message ? err.message : err), 'review');
           button.disabled = false;
         })
-        .parseSeaBankPreview(text);
+        .parseSeaBankPreview(extracted);
     } catch (err) {
       setStatus('Gagal membaca PDF: ' + err.message, 'review');
       button.disabled = false;
