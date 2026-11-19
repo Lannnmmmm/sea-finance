@@ -15,7 +15,7 @@ function parseSeaBankPreview(extractedText) {
   let current = null;
 
   pages.forEach(function(pageText) {
-    const match = pageText.match(new RegExp('\\bS/N\\s+(S\\d{2}-\\d{6}[A-Z0-9]+)\\b', 'i'));
+    const match = pageText.match(/S\s*\/\s*N\s*(S\d{2}-\d{6}[A-Z0-9]+)/i);
     if (!match) {
       if (current) current.text += '\n' + pageText;
       return;
@@ -59,9 +59,11 @@ function parseSeaBankSinglePreview_(extractedText) {
   const text = extractedText.replace(/\u00a0/g, ' ').replace(/[\r\t]+/g, ' ');
   const lines = text.split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
 
-  const serialMatch = text.match(new RegExp('\\bS/N\\s+(S\\d{2}-\\d{6}[A-Z0-9]+)\\b', 'i'));
+  const serialMatch = text.match(/S\s*\/\s*N\s*(S\d{2}-\d{6}[A-Z0-9]+)/i);
   const periodMatch = text.match(/(\d{2})\s+([A-Z]{3})\s+(20\d{2})\s+to\s+(\d{2})\s+([A-Z]{3})\s+(20\d{2})/i);
-  const summaryMatch = text.match(/SAVINGS\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/i);
+  const summaryLine = lines.find(function(line) { return /^SAVINGS\b/i.test(line) && (line.match(/[\d.]+/g) || []).length >= 4; });
+  const summaryValues = summaryLine ? summaryLine.match(/[\d.]+/g) : null;
+  const summaryMatch = summaryValues ? [summaryLine].concat(summaryValues.slice(0, 4)) : null;
 
   if (!serialMatch || !periodMatch || !summaryMatch) {
     return {
