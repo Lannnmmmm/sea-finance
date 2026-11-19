@@ -270,7 +270,7 @@ function parseSeaBankCoordinateTransactions_(pages, periodStart) {
       rows.forEach(function(row) {
         if (row.y > upperBoundary || row.y < lowerBoundary) return;
         row.parts.forEach(function(part) {
-          if (part.x >= 110 && part.x < 280 && part.y <= anchor.y + 3.5 &&
+          if (part.x >= 110 && part.x < 280 && part.y < anchor.y - 3.5 &&
               part.text && !/BANK STATEMENT|^S\s*\/\s*N/i.test(part.text)) {
             cellParts.push(part);
           }
