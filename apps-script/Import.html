@@ -25,6 +25,28 @@
     .metric { background: #f6f8fa; border-radius: 8px; padding: 10px; }
     .metric b { display: block; margin-top: 5px; }
     ul { padding-left: 20px; }
+
+    .toolbar { display:grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap:10px; margin:18px 0 12px; }
+    .toolbar label { display:flex; flex-direction:column; gap:6px; color:#475467; font-size:12px; font-weight:600; }
+    .toolbar input, .toolbar select { width:100%; box-sizing:border-box; border:1px solid #d0d5dd; border-radius:8px; padding:10px; background:#fff; color:#182230; }
+    .table-wrap { overflow-x:auto; border:1px solid #e4e7ec; border-radius:10px; }
+    table { width:100%; border-collapse:collapse; min-width:900px; font-size:13px; }
+    th, td { padding:10px 12px; border-bottom:1px solid #eaecf0; text-align:left; vertical-align:top; }
+    th { background:#f8fafc; color:#475467; font-size:12px; position:sticky; top:0; }
+    td.amount, td.balance { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+    td.description { min-width:260px; max-width:420px; overflow-wrap:anywhere; }
+    .pill { display:inline-block; border-radius:20px; padding:3px 8px; font-size:11px; font-weight:700; background:#eef2f6; color:#475467; }
+    .pill.in { background:#e8f5ec; color:#176534; }
+    .pill.out { background:#fff0ed; color:#b42318; }
+    .pill.review { background:#fff4df; color:#8a4b08; }
+    .table-footer { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-top:12px; }
+    .pager { display:flex; align-items:center; gap:8px; }
+    .pager button { padding:8px 12px; }
+    .pager button:disabled { opacity:.4; }
+    .empty { padding:24px; text-align:center; color:#667085; }
+    .section-heading { display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; }
+    @media (max-width:600px) { main { margin:16px auto; } .card { padding:16px; } }
+
   </style>
 </head>
 <body>
@@ -40,6 +62,51 @@
   <section id="results" class="card" hidden>
     <h2>Hasil pemeriksaan</h2>
     <div id="summary"></div>
+    <div class="section-heading" style="margin-top:28px">
+      <h2>Detail transaksi</h2>
+      <span id="transactionCount" class="muted"></span>
+    </div>
+    <p class="muted">Data di bawah adalah hasil ekstraksi asli. Kategori belum ditentukan dan belum ada transaksi yang disimpan.</p>
+    <div class="toolbar">
+      <label>Bulan
+        <select id="monthFilter"><option value="">Semua bulan</option></select>
+      </label>
+      <label>Arah transaksi
+        <select id="directionFilter">
+          <option value="">Semua arah</option>
+          <option value="IN">Uang masuk</option>
+          <option value="OUT">Uang keluar</option>
+          <option value="UNKNOWN">Tidak diketahui</option>
+        </select>
+      </label>
+      <label>Status
+        <select id="statusFilter">
+          <option value="">Semua status</option>
+          <option value="OK">VALID</option>
+          <option value="REVIEW">REVIEW</option>
+        </select>
+      </label>
+      <label>Cari deskripsi / tanggal
+        <input id="searchFilter" type="search" placeholder="Ketik kata kunci…">
+      </label>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Tanggal</th><th>Deskripsi (asli)</th><th>Nominal</th>
+          <th>Arah</th><th>Saldo setelah</th><th>Kategori</th><th>Status</th>
+        </tr></thead>
+        <tbody id="transactionRows"><tr><td colspan="7" class="empty">Belum ada data transaksi.</td></tr></tbody>
+      </table>
+    </div>
+    <div class="table-footer">
+      <span id="tableInfo" class="muted"></span>
+      <div class="pager">
+        <button id="prevPage" type="button" onclick="changePage(-1)">Sebelumnya</button>
+        <span id="pageInfo" class="muted"></span>
+        <button id="nextPage" type="button" onclick="changePage(1)">Berikutnya</button>
+      </div>
+    </div>
   </section>
 </main>
 <script>
@@ -47,6 +114,10 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   }
+
+  let allTransactions = [];
+  let currentPage = 1;
+  const pageSize = 50;
 
   function setStatus(message, kind) {
     const el = document.getElementById('status');
@@ -149,6 +220,27 @@
       html += '</div>';
     });
     summary.innerHTML = html;
+    allTransactions = [];
+    statements.forEach(function(statement) {
+      (statement.transactions || []).forEach(function(tx) {
+        allTransactions.push({
+          transactionDate: tx.transactionDate || '',
+          descriptionRaw: tx.descriptionRaw || '',
+          amount: tx.amount,
+          direction: tx.direction || 'UNKNOWN',
+          balanceAfter: tx.balanceAfter,
+          validation: tx.validation || 'REVIEW',
+          statementSerial: statement.statementSerial || '',
+          periodStart: statement.periodStart || ''
+        });
+      });
+    });
+    allTransactions.sort(function(a, b) {
+      return (a.transactionDate || '').localeCompare(b.transactionDate || '');
+    });
+    populateMonthFilter();
+    currentPage = 1;
+    renderTransactions();
     setStatus('Pemeriksaan selesai. Tidak ada data transaksi yang disimpan.', result.ok ? 'ok' : 'review');
     document.getElementById('previewBtn').disabled = false;
   }
@@ -156,6 +248,88 @@
   function metric(label, value) {
     return '<div class="metric"><span class="muted">' + label + '</span><b>' + value + '</b></div>';
   }
+
+
+  function populateMonthFilter() {
+    const select = document.getElementById('monthFilter');
+    const months = Array.from(new Set(allTransactions.map(function(tx) {
+      return tx.transactionDate ? tx.transactionDate.slice(0, 7) : '';
+    }).filter(Boolean))).sort();
+    select.innerHTML = '<option value="">Semua bulan</option>' +
+      months.map(function(month) {
+        return '<option value="' + escapeHtml(month) + '">' + escapeHtml(month) + '</option>';
+      }).join('');
+  }
+
+  function filteredTransactions() {
+    const month = document.getElementById('monthFilter').value;
+    const direction = document.getElementById('directionFilter').value;
+    const status = document.getElementById('statusFilter').value;
+    const query = document.getElementById('searchFilter').value.trim().toLowerCase();
+    return allTransactions.filter(function(tx) {
+      if (month && tx.transactionDate.slice(0, 7) !== month) return false;
+      if (direction && tx.direction !== direction) return false;
+      if (status && tx.validation !== status) return false;
+      if (query && (tx.descriptionRaw + ' ' + tx.transactionDate + ' ' + tx.statementSerial)
+          .toLowerCase().indexOf(query) === -1) return false;
+      return true;
+    });
+  }
+
+  function renderTransactions() {
+    const filtered = filteredTransactions();
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    currentPage = Math.min(currentPage, totalPages);
+    const start = (currentPage - 1) * pageSize;
+    const visible = filtered.slice(start, start + pageSize);
+    const tbody = document.getElementById('transactionRows');
+
+    if (!visible.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">Tidak ada transaksi yang cocok dengan filter.</td></tr>';
+    } else {
+      tbody.innerHTML = visible.map(function(tx) {
+        const directionLabel = tx.direction === 'IN' ? 'Masuk' :
+          tx.direction === 'OUT' ? 'Keluar' : 'Tidak diketahui';
+        const directionClass = tx.direction === 'IN' ? 'in' :
+          tx.direction === 'OUT' ? 'out' : 'review';
+        const statusLabel = tx.validation === 'OK' ? 'VALID' : 'REVIEW';
+        return '<tr>' +
+          '<td>' + escapeHtml(tx.transactionDate || '-') + '</td>' +
+          '<td class="description">' + escapeHtml(tx.descriptionRaw || '-') + '</td>' +
+          '<td class="amount">' + rupiah(tx.amount) + '</td>' +
+          '<td><span class="pill ' + directionClass + '">' + directionLabel + '</span></td>' +
+          '<td class="balance">' + rupiah(tx.balanceAfter) + '</td>' +
+          '<td><span class="muted">Belum diklasifikasi</span></td>' +
+          '<td><span class="pill ' + (tx.validation === 'OK' ? 'in' : 'review') + '">' + statusLabel + '</span></td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    document.getElementById('transactionCount').textContent =
+      filtered.length.toLocaleString('id-ID') + ' dari ' + allTransactions.length.toLocaleString('id-ID') + ' transaksi';
+    document.getElementById('tableInfo').textContent = filtered.length ?
+      'Menampilkan ' + (start + 1) + '–' + Math.min(start + pageSize, filtered.length) + ' transaksi' :
+      '0 transaksi ditampilkan';
+    document.getElementById('pageInfo').textContent = 'Halaman ' + currentPage + ' / ' + totalPages;
+    document.getElementById('prevPage').disabled = currentPage <= 1;
+    document.getElementById('nextPage').disabled = currentPage >= totalPages;
+  }
+
+  function changePage(delta) {
+    currentPage += delta;
+    renderTransactions();
+  }
+
+  ['monthFilter', 'directionFilter', 'statusFilter'].forEach(function(id) {
+    document.getElementById(id).addEventListener('change', function() {
+      currentPage = 1;
+      renderTransactions();
+    });
+  });
+  document.getElementById('searchFilter').addEventListener('input', function() {
+    currentPage = 1;
+    renderTransactions();
+  });
 
   function escapeHtml(value) {
     return String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;')
