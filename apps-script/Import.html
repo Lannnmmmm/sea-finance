@@ -93,10 +93,10 @@
     <div class="table-wrap">
       <table>
         <thead><tr>
-          <th>Tanggal</th><th>Deskripsi (asli)</th><th>Nominal</th>
+          <th>Tanggal</th><th>Deskripsi (asli)</th><th>Jenis</th><th>Nominal</th>
           <th>Arah</th><th>Saldo setelah</th><th>Kategori</th><th>Status</th>
         </tr></thead>
-        <tbody id="transactionRows"><tr><td colspan="7" class="empty">Belum ada data transaksi.</td></tr></tbody>
+        <tbody id="transactionRows"><tr><td colspan="8" class="empty">Belum ada data transaksi.</td></tr></tbody>
       </table>
     </div>
     <div class="table-footer">
@@ -220,6 +220,7 @@
         allTransactions.push({
           transactionDate: tx.transactionDate || '',
           descriptionRaw: tx.descriptionRaw || '',
+          transactionType: tx.transactionType || '',
           amount: tx.amount,
           direction: tx.direction || 'UNKNOWN',
           balanceAfter: tx.balanceAfter,
@@ -290,6 +291,7 @@
         return '<tr>' +
           '<td>' + escapeHtml(tx.transactionDate || '-') + '</td>' +
           '<td class="description">' + escapeHtml(tx.descriptionRaw || '-') + '</td>' +
+          '<td>' + escapeHtml(tx.transactionType || '-') + '</td>' +
           '<td class="amount">' + rupiah(tx.amount) + '</td>' +
           '<td><span class="pill ' + directionClass + '">' + directionLabel + '</span></td>' +
           '<td class="balance">' + rupiah(tx.balanceAfter) + '</td>' +
