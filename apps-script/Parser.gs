@@ -5,6 +5,10 @@
  */
 
 function parseSeaBankPreview(extractedText) {
+  if (extractedText && typeof extractedText === 'object' &&
+      extractedText.format === 'seabank-coordinate-v1' && Array.isArray(extractedText.pages)) {
+    return parseSeaBankCoordinatePreview_(extractedText.pages);
+  }
   if (typeof extractedText !== 'string' || extractedText.trim().length < 100) {
     throw new Error('Teks PDF kosong atau terlalu pendek.');
   }
@@ -51,7 +55,7 @@ function parseSeaBankPreview(extractedText) {
   };
 }
 
-function parseSeaBankSinglePreview_(extractedText) {
+function parseSeaBankSinglePreview_(extractedText, coordinatePages) {
   if (typeof extractedText !== 'string' || extractedText.trim().length < 100) {
     throw new Error('Teks PDF kosong atau terlalu pendek.');
   }
@@ -105,7 +109,7 @@ function parseSeaBankSinglePreview_(extractedText) {
   const transactionLines = sectionStart < 0 ? [] :
     lines.slice(sectionStart + 1, sectionEnd < 0 ? lines.length : sectionEnd);
 
-  const transactions = parseSeaBankTransactionLines_(transactionLines, periodStart);
+  const transactions = coordinatePages ? parseSeaBankCoordinateTransactions_(coordinatePages, periodStart) : parseSeaBankTransactionLines_(transactionLines, periodStart);
   if (!transactions.length) {
     errors.push('Tidak ada transaksi yang berhasil dikenali.');
   }
@@ -133,9 +137,12 @@ function parseSeaBankSinglePreview_(extractedText) {
       tx.direction = 'UNKNOWN';
       tx.amount = 0;
     }
-    tx.validation = tx.amount === tx.extractedAmount ? 'OK' : 'REVIEW';
+    tx.validation = tx.amount === tx.extractedAmount && tx.descriptionRaw &&
+      tx.descriptionRaw !== 'UNPARSED DESCRIPTION' ? 'OK' : 'REVIEW';
     tx.validationMessage = tx.validation === 'OK' ? '' :
-      'Nominal mutasi tidak cocok dengan perubahan saldo (baris ' + (index + 1) + ').';
+      (!tx.descriptionRaw || tx.descriptionRaw === 'UNPARSED DESCRIPTION' ?
+        'Deskripsi transaksi kosong/tidak terbaca.' :
+        'Nominal mutasi tidak cocok dengan perubahan saldo (baris ' + (index + 1) + ').');
     previousBalance = tx.balanceAfter;
   });
 
@@ -169,6 +176,139 @@ function parseSeaBankSinglePreview_(extractedText) {
     transactions: transactions,
     errors: errors
   };
+}
+
+
+function parseSeaBankCoordinatePreview_(pages) {
+  const groups = [];
+  let current = null;
+  pages.forEach(function(page) {
+    const items = page.items || [];
+    const text = seaBankCoordinatePageText_(items);
+    const match = text.match(/S\\s*\\/\\s*N\\s*(S\\d{2}-\\d{6}[A-Z0-9]+)/i);
+    if (match) {
+      if (!current || current.serial !== match[1]) {
+        current = { serial: match[1], pages: [] };
+        groups.push(current);
+      }
+    }
+    if (current) current.pages.push(items);
+  });
+  const statements = groups.map(function(group) {
+    const text = group.pages.map(seaBankCoordinatePageText_).join('\\n');
+    return parseSeaBankSinglePreview_(text, group.pages);
+  });
+  return combineSeaBankStatements_(statements);
+}
+
+function combineSeaBankStatements_(statements) {
+  const seen = {};
+  const duplicateSerials = [];
+  statements.forEach(function(s) {
+    if (!s.statementSerial) return;
+    if (seen[s.statementSerial]) duplicateSerials.push(s.statementSerial);
+    seen[s.statementSerial] = true;
+  });
+  const ok = statements.length > 0 && statements.every(function(s) { return s.ok; }) &&
+    duplicateSerials.length === 0;
+  return { ok: ok, status: ok ? 'VALID' : 'REVIEW', statementCount: statements.length,
+    duplicateSerials: duplicateSerials, statements: statements,
+    errors: duplicateSerials.length ? ['Nomor seri statement terdeteksi lebih dari sekali.'] : [] };
+}
+
+function seaBankCoordinatePageText_(items) {
+  const rows = seaBankCoordinateRows_(items);
+  return rows.map(function(row) {
+    return row.parts.map(function(part) { return part.text; }).join(' ').replace(/\\s+/g,' ').trim();
+  }).filter(Boolean).join('\\n');
+}
+
+function seaBankCoordinateRows_(items) {
+  const rows = [];
+  (items || []).forEach(function(item) {
+    const y = Number(item.y);
+    let row = rows.find(function(r) { return Math.abs(r.y-y) <= 1.5; });
+    if (!row) { row = { y:y, parts:[] }; rows.push(row); }
+    row.parts.push({ x:Number(item.x), y:y, text:String(item.text || '').trim() });
+  });
+  rows.forEach(function(row) { row.parts.sort(function(a,b) { return a.x-b.x; }); });
+  rows.sort(function(a,b) { return b.y-a.y; });
+  return rows;
+}
+
+function parseSeaBankCoordinateTransactions_(pages, periodStart) {
+  const monthMap = { JAN:0, FEB:1, MAR:2, APR:3, MAY:4, JUN:5,
+    JUL:6, AUG:7, SEP:8, OCT:9, NOV:10, DEC:11 };
+  const transactions = [];
+  const transactionTypes = /^(transfer|payment|interest|tax|fee|refund|cashback|top ?up|purchase|withdrawal|deposit)$/i;
+  pages.forEach(function(items) {
+    const rows = seaBankCoordinateRows_(items);
+    const anchors = [];
+    rows.forEach(function(row) {
+      const dateText = row.parts.filter(function(part) { return part.x < 110; })
+        .map(function(part) { return part.text; }).join(' ').trim();
+      const match = dateText.match(/^(\\d{2})\\s+([A-Z]{3})$/i);
+      if (match && monthMap[match[2].toUpperCase()] !== undefined) {
+        anchors.push({ day:Number(match[1]), month:monthMap[match[2].toUpperCase()], y:row.y, row:row });
+      }
+    });
+    anchors.forEach(function(anchor, index) {
+      const previousY = index === 0 ? Infinity : anchors[index-1].y;
+      const nextY = index === anchors.length-1 ? -Infinity : anchors[index+1].y;
+      const upperBoundary = index === 0 ? anchor.y + 26 : (previousY + anchor.y) / 2;
+      const lowerBoundary = index === anchors.length-1 ? anchor.y - 26 : (anchor.y + nextY) / 2;
+
+      const moneyParts = anchor.row.parts.filter(function(part) {
+        return part.x >= 280 && /\\d/.test(part.text);
+      });
+      const balancePart = moneyParts.filter(function(part) { return part.x >= 470; }).pop();
+      const amountParts = moneyParts.filter(function(part) { return part.x >= 280 && part.x < 470; });
+      if (!balancePart || !amountParts.length) return;
+      const amountPart = amountParts[amountParts.length-1];
+
+      const cellParts = [];
+      rows.forEach(function(row) {
+        if (row.y > upperBoundary || row.y < lowerBoundary) return;
+        row.parts.forEach(function(part) {
+          if (part.x >= 110 && part.x < 280 && part.y <= anchor.y + 3.5 &&
+              part.text && !/BANK STATEMENT|^S\\s*\\/\\s*N/i.test(part.text)) {
+            cellParts.push(part);
+          }
+        });
+      });
+      cellParts.sort(function(a,b) {
+        if (Math.abs(a.y-b.y) > 1) return b.y-a.y;
+        return a.x-b.x;
+      });
+      const description = cellParts.map(function(part) { return part.text; })
+        .join(' ').replace(/\\s+/g,' ').trim();
+
+      const typeParts = [];
+      rows.forEach(function(row) {
+        if (row.y > anchor.y + 3.5 || row.y > upperBoundary || row.y < lowerBoundary) return;
+        row.parts.forEach(function(part) {
+          if (part.x >= 110 && part.x < 280 && part.y > anchor.y + 3.5 &&
+              transactionTypes.test(part.text)) typeParts.push(part.text);
+        });
+      });
+      const transactionType = typeParts.length ? typeParts[0].toUpperCase() : '';
+
+      const year = Number(periodStart.slice(0,4));
+      const transactionDate = new Date(Date.UTC(year,anchor.month,anchor.day)).toISOString().slice(0,10);
+      transactions.push({
+        transactionDate:transactionDate,
+        descriptionRaw:description || 'UNPARSED DESCRIPTION',
+        transactionType:transactionType,
+        extractedAmount:parseSeaBankMoney_(amountPart.text),
+        amount:null,
+        direction:'UNKNOWN',
+        balanceAfter:parseSeaBankMoney_(balancePart.text),
+        validation:'REVIEW',
+        validationMessage:''
+      });
+    });
+  });
+  return transactions;
 }
 
 function parseSeaBankTransactionLines_(lines, periodStart) {
