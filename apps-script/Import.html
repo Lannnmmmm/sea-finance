@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    :root { color-scheme: light; font-family: Arial, sans-serif; }
+    body { margin: 0; background: #f3f5f8; color: #182230; }
+    main { max-width: 980px; margin: 32px auto; padding: 0 18px; }
+    .card { background: white; border: 1px solid #dce2ea; border-radius: 14px; padding: 22px; margin-bottom: 16px; }
+    h1 { margin: 0 0 8px; font-size: 25px; }
+    p { color: #5b6675; line-height: 1.5; }
+    input, button { font: inherit; }
+    input[type=file] { display: block; margin: 18px 0; max-width: 100%; }
+    button { border: 0; border-radius: 8px; background: #17365d; color: white; padding: 11px 17px; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: wait; }
+    .muted { color: #667085; font-size: 13px; }
+    .status { padding: 12px; border-radius: 8px; background: #eef2f6; margin-top: 14px; white-space: pre-wrap; }
+    .ok { background: #e8f5ec; color: #176534; }
+    .review { background: #fff4df; color: #8a4b08; }
+    .statement { border-top: 1px solid #e5e9ef; padding: 14px 0; }
+    .statement:first-child { border-top: 0; }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 10px; margin-top: 12px; }
+    .metric { background: #f6f8fa; border-radius: 8px; padding: 10px; }
+    .metric b { display: block; margin-top: 5px; }
+    ul { padding-left: 20px; }
+  </style>
+</head>
+<body>
+<main>
+  <section class="card">
+    <h1>Sea-Finance · Import Preview</h1>
+    <p>Pilih PDF e-Statement SeaBank untuk mengekstrak teks dan memeriksa ringkasan. Pada tahap ini file hanya diproses untuk preview; transaksi belum disimpan ke database.</p>
+    <input id="pdfFile" type="file" accept="application/pdf,.pdf">
+    <button id="previewBtn" onclick="previewPdf()">Baca & Validasi PDF</button>
+    <div id="status" class="status">Menunggu file PDF.</div>
+    <p class="muted">PDF diproses di browser menggunakan PDF.js. Teks hasil ekstraksi dikirim ke Apps Script untuk parsing dan validasi.</p>
+  </section>
+  <section id="results" class="card" hidden>
+    <h2>Hasil pemeriksaan</h2>
+    <div id="summary"></div>
+  </section>
+</main>
+<script>
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
+  function setStatus(message, kind) {
+    const el = document.getElementById('status');
+    el.textContent = message;
+    el.className = 'status ' + (kind || '');
+  }
+
+  async function extractPdfText(file) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+    const pages = [];
+
+    for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
+      const page = await pdf.getPage(pageNo);
+      const content = await page.getTextContent();
+      const rows = [];
+
+      content.items.forEach(function(item) {
+        if (!item.str || !item.str.trim()) return;
+        const y = Math.round(item.transform[5] * 2) / 2;
+        let row = rows.find(function(r) { return Math.abs(r.y - y) <= 1.5; });
+        if (!row) {
+          row = { y: y, parts: [] };
+          rows.push(row);
+        }
+        row.parts.push({ x: item.transform[4], text: item.str.trim() });
+      });
+
+      rows.sort(function(a,b) { return b.y - a.y; });
+      const lines = rows.map(function(row) {
+        return row.parts.sort(function(a,b) { return a.x - b.x; })
+          .map(function(part) { return part.text; }).join(' ').replace(/\\s+/g, ' ').trim();
+      }).filter(Boolean);
+      pages.push(lines.join('\\n'));
+    }
+    return pages.join('\\f');
+  }
+
+  async function previewPdf() {
+    const file = document.getElementById('pdfFile').files[0];
+    const button = document.getElementById('previewBtn');
+    if (!file) {
+      setStatus('Pilih file PDF terlebih dahulu.', 'review');
+      return;
+    }
+    if (!window.pdfjsLib) {
+      setStatus('PDF.js gagal dimuat. Periksa koneksi internet lalu refresh halaman.', 'review');
+      return;
+    }
+    button.disabled = true;
+    document.getElementById('results').hidden = true;
+    try {
+      setStatus('Mengekstrak teks PDF…');
+      const text = await extractPdfText(file);
+      if (text.replace(/\\s/g, '').length < 100) {
+        throw new Error('PDF tidak memiliki teks yang dapat dibaca. File scan memerlukan OCR.');
+      }
+      setStatus('Teks berhasil diekstrak. Mengirim ke parser…');
+      google.script.run
+        .withSuccessHandler(renderResult)
+        .withFailureHandler(function(err) {
+          setStatus('Parser gagal: ' + (err && err.message ? err.message : err), 'review');
+          button.disabled = false;
+        })
+        .parseSeaBankPreview(text);
+    } catch (err) {
+      setStatus('Gagal membaca PDF: ' + err.message, 'review');
+      button.disabled = false;
+    }
+  }
+
+  function rupiah(value) {
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR',
+      maximumFractionDigits: 0 }).format(Number(value || 0));
+  }
+
+  function renderResult(result) {
+    const box = document.getElementById('results');
+    const summary = document.getElementById('summary');
+    box.hidden = false;
+    const statements = result.statements || [result];
+    let html = '<div class="status ' + (result.ok ? 'ok' : 'review') + '">' +
+      (result.ok ? 'Semua statement lolos validasi.' : 'Perlu pemeriksaan manual. Belum ada transaksi yang disimpan.') +
+      '</div>';
+    html += '<p>Jumlah statement terdeteksi: <b>' + (result.statementCount || statements.length) + '</b></p>';
+    statements.forEach(function(s) {
+      html += '<div class="statement"><b>' + (s.statementSerial || 'Nomor seri tidak ditemukan') +
+        '</b><div class="muted">' + (s.periodStart || '-') + ' s.d. ' + (s.periodEnd || '-') +
+        ' · ' + (s.transactionCount || 0) + ' transaksi terdeteksi · Status: ' + s.status + '</div>';
+      if (s.summary) {
+        html += '<div class="metrics">' +
+          metric('Saldo awal', rupiah(s.summary.openingBalance)) +
+          metric('Outgoing', rupiah(s.summary.totalOutgoing)) +
+          metric('Incoming', rupiah(s.summary.totalIncoming)) +
+          metric('Saldo akhir', rupiah(s.summary.endingBalance)) + '</div>';
+      }
+      if (s.errors && s.errors.length) {
+        html += '<ul>' + s.errors.map(function(e) { return '<li>' + escapeHtml(e) + '</li>'; }).join('') + '</ul>';
+      }
+      html += '</div>';
+    });
+    summary.innerHTML = html;
+    setStatus('Pemeriksaan selesai. Tidak ada data transaksi yang disimpan.', result.ok ? 'ok' : 'review');
+    document.getElementById('previewBtn').disabled = false;
+  }
+
+  function metric(label, value) {
+    return '<div class="metric"><span class="muted">' + label + '</span><b>' + value + '</b></div>';
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+</script>
+</body>
+</html>
