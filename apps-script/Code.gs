@@ -9,6 +9,21 @@
  */
 
 function doGet() {
+  return HtmlService.createTemplateFromFile('Import')
+    .evaluate()
+    .setTitle('Sea-Finance · Import Preview')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}*
+ * Sea-Finance — Core backend
+ * API dasar untuk dashboard dan review transaksi.
+ *
+ * Catatan:
+ * - Script ini dirancang sebagai container-bound Apps Script pada Spreadsheet.
+ * - Tidak melakukan parsing PDF atau mengubah transaksi.
+ * - Semua nominal disimpan sebagai integer Rupiah.
+ */
+
+function doGet() {
   return HtmlService.createHtmlOutput(
     '<main style="font:16px Arial,sans-serif;max-width:720px;margin:48px auto;padding:24px">' +
     '<h1>Sea-Finance</h1>' +
