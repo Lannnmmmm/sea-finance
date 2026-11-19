@@ -78,11 +78,11 @@
       rows.sort(function(a,b) { return b.y - a.y; });
       const lines = rows.map(function(row) {
         return row.parts.sort(function(a,b) { return a.x - b.x; })
-          .map(function(part) { return part.text; }).join(' ').replace(/\\s+/g, ' ').trim();
+          .map(function(part) { return part.text; }).join(' ').replace(/\s+/g, ' ').trim();
       }).filter(Boolean);
-      pages.push(lines.join('\\n'));
+      pages.push(lines.join('\n'));
     }
-    return pages.join('\\f');
+    return pages.join('\f');
   }
 
   async function previewPdf() {
@@ -101,7 +101,7 @@
     try {
       setStatus('Mengekstrak teks PDF…');
       const text = await extractPdfText(file);
-      if (text.replace(/\\s/g, '').length < 100) {
+      if (text.replace(/\s/g, '').length < 100) {
         throw new Error('PDF tidak memiliki teks yang dapat dibaca. File scan memerlukan OCR.');
       }
       setStatus('Teks berhasil diekstrak. Mengirim ke parser…');
