@@ -144,7 +144,7 @@ Jangan samakan total outgoing/incoming dari statement dengan pengeluaran/pendapa
 - Penempatan/pencairan deposito adalah perpindahan aset, bukan pengeluaran/pendapatan.
 - Deposito dan saldo tabungan dilaporkan sebagai aset terpisah.
 
-Keterangan transfer saja tidak cukup untuk memastikan kepemilikan rekening tujuan. Klasifikasi seperti transfer ke rekening BRI atas nama sendiri harus dikonfirmasi pengguna sebelum aturan otomatis dibuat.
+Rekening BRI tujuan dengan nama AAN MAULANA telah dikonfirmasi pengguna sebagai rekening milik sendiri. Transaksi SeaBank ke rekening BRI tersebut diklasifikasikan sebagai TRANSFER_INTERNAL, bukan beban. Jika kelak ada rekening tujuan lain, kepemilikannya harus dikonfirmasi sebelum aturan otomatis dibuat.
 
 ## 7. Rekonsiliasi dan kualitas data
 
@@ -175,6 +175,6 @@ Untuk setiap statement:
 
 ## 10. Keputusan yang masih perlu dikonfirmasi
 
-- Apakah rekening BRI tujuan atas nama AAN MAULANA adalah rekening milik sendiri?
+- Perlakuan top up DANA/LinkAja/ShopeePay: transfer ke akun dompet digital (dan pengeluaran dicatat saat saldo dipakai), atau langsung dicatat sebagai pengeluaran?
 - Apakah top up DANA/LinkAja/ShopeePay ingin dicatat sebagai transfer ke dompet digital, lalu pengeluaran dicatat saat saldo dipakai, atau langsung dianggap pengeluaran?
 - Kategori pengeluaran dan pemasukan final akan disepakati setelah contoh transaksi ditinjau.
