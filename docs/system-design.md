@@ -137,7 +137,7 @@ Simpan nilai uang sebagai integer Rupiah, bukan floating point.
 Jangan samakan total outgoing/incoming dari statement dengan pengeluaran/pendapatan konsumsi.
 
 - Transfer antar rekening milik sendiri bukan pendapatan atau beban.
-- Top up e-wallet perlu ditentukan: transfer ke saldo e-wallet atau pengeluaran, jangan dihitung dua kali.
+- Top up e-wallet mengikuti `EWALLET_TOPUP_MODE` pada sheet `Settings`. Default `EXPENSE`: top-up langsung dicatat sebagai pengeluaran. Jika diubah menjadi `TRANSFER`, top-up dicatat sebagai transfer ke saldo e-wallet dan pengeluaran baru dicatat saat transaksi e-wallet diimpor. Jangan menghitung top-up dan pembelian yang sama sebagai dua pengeluaran.
 - Bunga tabungan adalah pendapatan bunga.
 - Pajak bunga dan biaya admin/top-up adalah beban/potongan.
 - Refund harus dikaitkan ke transaksi asal jika memungkinkan.
@@ -173,8 +173,10 @@ Untuk setiap statement:
 6. Bangun kategori, aturan otomatis, dan dashboard.
 7. Uji beberapa periode statement dan deploy Web App.
 
-## 10. Keputusan yang masih perlu dikonfirmasi
+### Settings
+Tambahkan sheet `Settings` agar perilaku dapat diubah tanpa mengedit kode:
+- `EWALLET_TOPUP_MODE` = `EXPENSE` (default) atau `TRANSFER`.
 
-- Perlakuan top up DANA/LinkAja/ShopeePay: transfer ke akun dompet digital (dan pengeluaran dicatat saat saldo dipakai), atau langsung dicatat sebagai pengeluaran?
-- Apakah top up DANA/LinkAja/ShopeePay ingin dicatat sebagai transfer ke dompet digital, lalu pengeluaran dicatat saat saldo dipakai, atau langsung dianggap pengeluaran?
-- Kategori pengeluaran dan pemasukan final akan disepakati setelah contoh transaksi ditinjau.
+`EXPENSE` cocok jika sumber data hanya e-Statement SeaBank. `TRANSFER` cocok jika riwayat transaksi e-wallet juga akan diimpor, sehingga pengeluaran diakui saat saldo digunakan.
+
+Transfer SeaBank ke rekening BRI milik sendiri untuk mengambil uang tunai tetap `TRANSFER_INTERNAL`, bukan pengeluaran. Pengeluaran tunai dicatat saat uang digunakan.
