@@ -14,7 +14,7 @@ Personal finance reporting system based on monthly SeaBank e-Statements.
 
 - [x] Analyze sample SeaBank statement format
 - [x] Document initial system design
-- [ ] Create Google Sheets database schema
+- [x] Create Google Sheets database schema (bootstrap script)
 - [ ] Implement and test PDF parser
 - [ ] Add reconciliation and duplicate protection
 - [ ] Build upload/review interface
