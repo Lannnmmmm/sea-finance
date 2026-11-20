@@ -44,6 +44,7 @@
     .pager button { padding:8px 12px; }
     .pager button:disabled { opacity:.4; }
     .empty { padding:24px; text-align:center; color:#667085; }
+    .tx-category { display:block; width:180px; max-width:100%; margin:3px 0; padding:7px; border:1px solid #d0d5dd; border-radius:7px; background:#fff; font-size:12px; }
     .section-heading { display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; }
     .category-form { display:grid; grid-template-columns:2fr 1fr auto; gap:8px; align-items:end; }
     .category-form label { display:flex; flex-direction:column; gap:6px; color:#475467; font-size:12px; font-weight:600; }
@@ -282,8 +283,11 @@
           direction: tx.direction || 'UNKNOWN',
           balanceAfter: tx.balanceAfter,
           validation: tx.validation || 'REVIEW',
+          categoryId: tx.categoryId || '',
           categoryName: tx.categoryName || 'Belum diklasifikasi',
           classificationStatus: tx.classificationStatus || 'REVIEW',
+          classifiedType: tx.classifiedType || tx.transactionType || '',
+          transferPurpose: '',
           statementSerial: statement.statementSerial || '',
           periodStart: statement.periodStart || ''
         });
@@ -352,6 +356,19 @@
         const directionClass = tx.direction === 'IN' ? 'in' :
           tx.direction === 'OUT' ? 'out' : 'review';
         const statusLabel = tx.validation === 'OK' ? 'VALID' : 'REVIEW';
+        const txIndex = allTransactions.indexOf(tx);
+        const categorySelect = '<select class="tx-category" onchange="changeTransactionCategory(' + txIndex + ',this.value)">' +
+          '<option value="">Pilih kategori…</option>' + categoryOptions.map(function(cat) {
+            return '<option value="' + escapeHtml(cat.category_id) + '"' +
+              (tx.categoryId === cat.category_id ? ' selected' : '') + '>' +
+              escapeHtml(cat.category_name) + '</option>';
+          }).join('') + '</select>';
+        const purposeSelect = tx.classifiedType === 'TRANSFER_INTERNAL' && tx.direction === 'OUT' ?
+          '<select class="tx-category" onchange="changeTransferPurpose(' + txIndex + ',this.value)">' +
+          '<option value="">Tujuan dana…</option>' +
+          '<option value="CASH_WITHDRAWAL"' + (tx.transferPurpose === 'CASH_WITHDRAWAL' ? ' selected' : '') + '>Ambil tunai</option>' +
+          '<option value="INSTALLMENT"' + (tx.transferPurpose === 'INSTALLMENT' ? ' selected' : '') + '>Dana cicilan</option>' +
+          '<option value="OTHER"' + (tx.transferPurpose === 'OTHER' ? ' selected' : '') + '>Kebutuhan lain</option></select>' : '';
         return '<tr>' +
           '<td>' + escapeHtml(tx.transactionDate || '-') + '</td>' +
           '<td class="description">' + escapeHtml(tx.descriptionRaw || '-') + '</td>' +
@@ -359,7 +376,7 @@
           '<td class="amount">' + rupiah(tx.amount) + '</td>' +
           '<td><span class="pill ' + directionClass + '">' + directionLabel + '</span></td>' +
           '<td class="balance">' + rupiah(tx.balanceAfter) + '</td>' +
-          '<td>' + escapeHtml(tx.categoryName) + ' <span class="pill ' +
+          '<td>' + categorySelect + purposeSelect + ' <span class="pill ' +
             (tx.classificationStatus === 'AUTO' ? 'in' : 'review') + '">' +
             escapeHtml(tx.classificationStatus) + '</span></td>' +
           '<td><span class="pill ' + (tx.validation === 'OK' ? 'in' : 'review') + '">' + statusLabel + '</span></td>' +
@@ -375,6 +392,21 @@
     document.getElementById('pageInfo').textContent = 'Halaman ' + currentPage + ' / ' + totalPages;
     document.getElementById('prevPage').disabled = currentPage <= 1;
     document.getElementById('nextPage').disabled = currentPage >= totalPages;
+  }
+
+  function changeTransactionCategory(index, categoryId) {
+    const tx = allTransactions[index];
+    if (!tx) return;
+    const category = categoryOptions.find(function(item) { return item.category_id === categoryId; });
+    tx.categoryId = categoryId;
+    tx.categoryName = category ? category.category_name : 'Belum diklasifikasi';
+    tx.classificationStatus = categoryId ? 'MANUAL' : 'REVIEW';
+    tx.classifiedType = category ? category.category_type : tx.transactionType;
+    renderTransactions();
+  }
+
+  function changeTransferPurpose(index, purpose) {
+    if (allTransactions[index]) allTransactions[index].transferPurpose = purpose;
   }
 
   function changePage(delta) {
