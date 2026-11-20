@@ -242,6 +242,70 @@ function getActiveCategories() {
   });
 }
 
+function getCategoryAdminList() {
+  return readSheetObjects_(getDatabase_(), 'Categories');
+}
+
+function updateCategory(categoryId, patch) {
+  const id = String(categoryId || '').trim();
+  patch = patch || {};
+  const name = String(patch.category_name || '').trim();
+  const type = String(patch.category_type || '').trim().toUpperCase();
+  const parentId = String(patch.parent_category_id || '').trim();
+  const active = patch.is_active === true || String(patch.is_active).toUpperCase() === 'TRUE';
+  const allowed = ['INCOME','EXPENSE','TRANSFER','ASSET','FEES','TAX'];
+  if (!id || !name) throw new Error('ID dan nama kategori wajib diisi.');
+  if (name.length > 60) throw new Error('Nama kategori maksimal 60 karakter.');
+  if (allowed.indexOf(type) === -1) throw new Error('Jenis kategori tidak valid.');
+
+  const ss = getDatabase_();
+  const sheet = ss.getSheetByName('Categories');
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) throw new Error('Data kategori kosong.');
+  const headers = values[0].map(function(v) { return String(v).trim(); });
+  const col = {};
+  headers.forEach(function(h, i) { col[h] = i; });
+  ['category_id','category_name','category_type','parent_category_id','is_active'].forEach(function(h) {
+    if (col[h] === undefined) throw new Error('Kolom Categories tidak lengkap: ' + h);
+  });
+  const rows = values.slice(1).map(function(row, i) {
+    return { rowNumber: i + 2, id: String(row[col.category_id] || '').trim(),
+      name: String(row[col.category_name] || '').trim(), type: String(row[col.category_type] || '').toUpperCase(),
+      parent: String(row[col.parent_category_id] || '').trim(), active: isTruthy_(row[col.is_active]) };
+  });
+  const target = rows.find(function(row) { return row.id === id; });
+  if (!target) throw new Error('Kategori tidak ditemukan.');
+  if (rows.some(function(row) { return row.id !== id && row.name.toLowerCase() === name.toLowerCase(); })) {
+    throw new Error('Nama kategori sudah digunakan.');
+  }
+  if (parentId === id) throw new Error('Kategori tidak bisa menjadi induk dirinya sendiri.');
+  const parent = parentId ? rows.find(function(row) { return row.id === parentId; }) : null;
+  if (parentId && !parent) throw new Error('Kategori induk tidak ditemukan.');
+  if (parent && parent.type !== type) throw new Error('Jenis kategori harus sama dengan kategori induknya.');
+  if (parent && !parent.active) throw new Error('Kategori induk harus aktif.');
+
+  let cursor = parent;
+  while (cursor) {
+    if (cursor.id === id) throw new Error('Struktur kategori tidak boleh membentuk siklus.');
+    cursor = cursor.parent ? rows.find(function(row) { return row.id === cursor.parent; }) : null;
+  }
+  const children = rows.filter(function(row) { return row.parent === id; });
+  if (children.some(function(row) { return row.type !== type; })) {
+    throw new Error('Jenis kategori tidak bisa diubah karena ada subkategori dengan jenis berbeda.');
+  }
+  if (!active && children.some(function(row) { return row.active; })) {
+    throw new Error('Nonaktifkan subkategori terlebih dahulu sebelum menonaktifkan kategori induk.');
+  }
+
+  const rowNumber = target.rowNumber;
+  sheet.getRange(rowNumber, col.category_name + 1).setValue(name);
+  sheet.getRange(rowNumber, col.category_type + 1).setValue(type);
+  sheet.getRange(rowNumber, col.parent_category_id + 1).setValue(parentId);
+  sheet.getRange(rowNumber, col.is_active + 1).setValue(active);
+  return { category_id: id, category_name: name, category_type: type,
+    parent_category_id: parentId, is_active: active };
+}
+
 function addCategory(categoryName, categoryType) {
   const name = String(categoryName || '').trim();
   const type = String(categoryType || '').trim().toUpperCase();
