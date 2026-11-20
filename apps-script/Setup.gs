@@ -146,7 +146,11 @@ function seedDefaults_(ss) {
     ['EXP_TAX','Pajak','EXPENSE','',true],
     ['EXP_OTHER','Pengeluaran Lainnya','EXPENSE','',true],
     ['TR_INTERNAL','Transfer Internal','TRANSFER','',true],
-    ['ASSET_DEPOSIT','Penempatan/Pencairan Deposito','ASSET','',true]
+    ['ASSET_DEPOSIT','Penempatan/Pencairan Deposito','ASSET','',true],
+    ['TR_EXTERNAL','Transfer dengan Pihak Lain','TRANSFER','',true],
+    ['EXP_VAPE','Belanja Pribadi - Rokok Elektrik','EXPENSE','',true],
+    ['EXP_HOUSEHOLD','Kebutuhan Rumah Tangga','EXPENSE','',true],
+    ['EXP_PET','Kebutuhan Hewan Peliharaan','EXPENSE','',true]
   ];
 
   const rules = [
@@ -155,7 +159,16 @@ function seedDefaults_(ss) {
     ['RULE_003',3,'description_raw','CONTAINS','BUNGA','INC_INTEREST','INCOME',false,true,'Contoh awal; sesuaikan dengan deskripsi statement'],
     ['RULE_004',4,'description_raw','CONTAINS','SAVINGS INTEREST','INC_INTEREST','INCOME',false,true,'Bunga tabungan SeaBank'],
     ['RULE_005',5,'description_raw','CONTAINS','SAVINGS WITHHOLDING TAX','EXP_TAX','TAX',false,true,'Pajak atas bunga tabungan SeaBank'],
-    ['RULE_006',6,'description_raw','CONTAINS','AAN MAULANA BRI 023001095396506','TR_INTERNAL','TRANSFER_INTERNAL',false,true,'Transfer ke rekening BRI milik sendiri yang telah dikonfirmasi pengguna']
+    ['RULE_006',6,'description_raw','CONTAINS','AAN MAULANA BRI 023001095396506','TR_INTERNAL','TRANSFER_INTERNAL',false,true,'Transfer ke rekening BRI milik sendiri yang telah dikonfirmasi pengguna'],
+    ['RULE_007',7,'description_raw','EQUALS','DANA','TR_INTERNAL','TRANSFER_INTERNAL',false,true,'Pencairan saldo DANA milik sendiri ke SeaBank'],
+    ['RULE_008',8,'description_raw','EQUALS','SHOPEEPAY','TR_INTERNAL','TRANSFER_INTERNAL',false,true,'Pencairan saldo ShopeePay milik sendiri ke SeaBank'],
+    ['RULE_009',9,'description_raw','CONTAINS','AFRIZAL JUNAEDI','TR_EXTERNAL','TRANSFER',false,true,'Transfer dengan pihak lain; bukan transfer internal'],
+    ['RULE_010',10,'description_raw','CONTAINS','CC VAPOR','EXP_VAPE','EXPENSE',false,true,'Belanja pribadi rokok elektrik'],
+    ['RULE_011',11,'description_raw','CONTAINS','QUARTER VAPE STORE','EXP_VAPE','EXPENSE',false,true,'Belanja pribadi rokok elektrik'],
+    ['RULE_012',12,'description_raw','CONTAINS','TOKO SAYUR BALAP','EXP_HOUSEHOLD','EXPENSE',false,true,'Kebutuhan rumah tangga'],
+    ['RULE_013',13,'description_raw','CONTAINS','TOKO SAHABAT BARU','EXP_HOUSEHOLD','EXPENSE',false,true,'Kebutuhan rumah tangga'],
+    ['RULE_014',14,'description_raw','CONTAINS','PET SHOP PBI','EXP_PET','EXPENSE',false,true,'Kebutuhan hewan peliharaan'],
+    ['RULE_015',15,'description_raw','CONTAINS','TOKO PAKAN JAYA','EXP_PET','EXPENSE',false,true,'Kebutuhan hewan peliharaan']
   ];
 
   const settings = [
