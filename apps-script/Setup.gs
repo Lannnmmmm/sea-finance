@@ -153,7 +153,11 @@ function seedDefaults_(ss) {
     ['TR_EXTERNAL','Transfer dengan Pihak Lain','TRANSFER','',true],
     ['EXP_VAPE','Belanja Pribadi - Rokok Elektrik','EXPENSE','',true],
     ['EXP_HOUSEHOLD','Kebutuhan Rumah Tangga','EXPENSE','',true],
-    ['EXP_PET','Kebutuhan Hewan Peliharaan','EXPENSE','',true]
+    ['EXP_PET','Kebutuhan Hewan Peliharaan','EXPENSE','',true],
+    ['ASSET_INVESTMENT','Investasi / Aset','ASSET','',true],
+    ['EXP_PERSONAL','Belanja Pribadi','EXPENSE','',true],
+    ['EXP_MARKETPLACE','Belanja Marketplace (Campuran)','EXPENSE','',true],
+    ['EXP_PURCHASE','Pembayaran / Pembelian','EXPENSE','',true]
   ];
 
   const rules = [
@@ -171,7 +175,15 @@ function seedDefaults_(ss) {
     ['RULE_012',12,'description_raw','CONTAINS','TOKO SAYUR BALAP','EXP_HOUSEHOLD','EXPENSE',false,true,'Kebutuhan rumah tangga'],
     ['RULE_013',13,'description_raw','CONTAINS','TOKO SAHABAT BARU','EXP_HOUSEHOLD','EXPENSE',false,true,'Kebutuhan rumah tangga'],
     ['RULE_014',14,'description_raw','CONTAINS','PET SHOP PBI','EXP_PET','EXPENSE',false,true,'Kebutuhan hewan peliharaan'],
-    ['RULE_015',15,'description_raw','CONTAINS','TOKO PAKAN JAYA','EXP_PET','EXPENSE',false,true,'Kebutuhan hewan peliharaan']
+    ['RULE_015',15,'description_raw','CONTAINS','TOKO PAKAN JAYA','EXP_PET','EXPENSE',false,true,'Kebutuhan hewan peliharaan'],
+    ['RULE_016',16,'description_raw','CONTAINS','PB JALAN KENDUNG SEMEMI 2','EXP_BILLS','EXPENSE',false,true,'Tagihan/utilitas terkonfirmasi','OUT'],
+    ['RULE_017',17,'description_raw','CONTAINS','BITTIME','ASSET_INVESTMENT','ASSET',false,true,'Investasi/aset terkonfirmasi','OUT'],
+    ['RULE_018',18,'description_raw','CONTAINS','LYNKID','EXP_PERSONAL','EXPENSE',false,true,'Belanja pribadi terkonfirmasi','OUT'],
+    ['RULE_019',19,'description_raw','CONTAINS','SHOPEE','EXP_MARKETPLACE','EXPENSE',false,true,'Belanja marketplace campuran; hanya transaksi keluar','OUT'],
+    ['RULE_020',20,'description_raw','CONTAINS','NANIK SETIYAWATI','EXP_PURCHASE','EXPENSE',false,true,'Pembayaran/pembelian terkonfirmasi','OUT'],
+    ['RULE_021',21,'description_raw','CONTAINS','EVA CHILMIYATIN','EXP_PURCHASE','EXPENSE',false,true,'Pembayaran/pembelian terkonfirmasi','OUT'],
+    ['RULE_022',22,'description_raw','CONTAINS','AFIF ABDILLA','EXP_PURCHASE','EXPENSE',false,true,'Pembayaran/pembelian terkonfirmasi','OUT'],
+    ['RULE_023',23,'description_raw','CONTAINS','AAN MAULANA GOPAY','EXP_PURCHASE','EXPENSE',false,true,'Pembayaran langsung melalui GoPay terkonfirmasi','OUT'] 
   ];
 
   const settings = [
@@ -219,7 +231,29 @@ function migrateConfirmedRules_(sheet) {
       notes: 'Dana masuk dari e-wallet; sumber pendapatan perlu dirinci saat review' },
     RULE_008: { category_id: 'INC_OTHER', transaction_type: 'INCOME',
       requires_review: true, direction: 'IN',
-      notes: 'ShopeePay masuk; sumber pendapatan perlu dirinci saat review' }
+      notes: 'ShopeePay masuk; sumber pendapatan perlu dirinci saat review' },
+    RULE_004: { category_id: 'INC_INTEREST', transaction_type: 'INCOME',
+      requires_review: false, direction: '',
+      notes: 'Bunga tabungan SeaBank otomatis' },
+    RULE_005: { category_id: 'EXP_TAX', transaction_type: 'TAX',
+      requires_review: false, direction: '',
+      notes: 'Pajak bunga tabungan SeaBank otomatis' },
+    RULE_016: { category_id: 'EXP_BILLS', transaction_type: 'EXPENSE',
+      requires_review: false, direction: 'OUT', notes: 'Tagihan/utilitas terkonfirmasi' },
+    RULE_017: { category_id: 'ASSET_INVESTMENT', transaction_type: 'ASSET',
+      requires_review: false, direction: 'OUT', notes: 'Investasi/aset terkonfirmasi' },
+    RULE_018: { category_id: 'EXP_PERSONAL', transaction_type: 'EXPENSE',
+      requires_review: false, direction: 'OUT', notes: 'Belanja pribadi terkonfirmasi' },
+    RULE_019: { category_id: 'EXP_MARKETPLACE', transaction_type: 'EXPENSE',
+      requires_review: false, direction: 'OUT', notes: 'Belanja marketplace campuran; hanya transaksi keluar' },
+    RULE_020: { category_id: 'EXP_PURCHASE', transaction_type: 'EXPENSE',
+      requires_review: false, direction: 'OUT', notes: 'Pembayaran/pembelian terkonfirmasi' },
+    RULE_021: { category_id: 'EXP_PURCHASE', transaction_type: 'EXPENSE',
+      requires_review: false, direction: 'OUT', notes: 'Pembayaran/pembelian terkonfirmasi' },
+    RULE_022: { category_id: 'EXP_PURCHASE', transaction_type: 'EXPENSE',
+      requires_review: false, direction: 'OUT', notes: 'Pembayaran/pembelian terkonfirmasi' },
+    RULE_023: { category_id: 'EXP_PURCHASE', transaction_type: 'EXPENSE',
+      requires_review: false, direction: 'OUT', notes: 'Pembayaran langsung melalui GoPay terkonfirmasi' }
   };
   for (let r = 1; r < values.length; r++) {
     const id = String(values[r][col.rule_id] || '');
