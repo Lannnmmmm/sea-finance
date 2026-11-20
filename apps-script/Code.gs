@@ -234,3 +234,31 @@ function escapeHtml_(value) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+
+function getActiveCategories() {
+  return readSheetObjects_(getDatabase_(), 'Categories').filter(function(row) {
+    return isTruthy_(row.is_active);
+  });
+}
+
+function addCategory(categoryName, categoryType) {
+  const name = String(categoryName || '').trim();
+  const type = String(categoryType || '').trim().toUpperCase();
+  const allowed = ['INCOME','EXPENSE','TRANSFER','ASSET','FEES','TAX'];
+  if (!name) throw new Error('Nama kategori wajib diisi.');
+  if (name.length > 60) throw new Error('Nama kategori maksimal 60 karakter.');
+  if (allowed.indexOf(type) === -1) throw new Error('Jenis kategori tidak valid.');
+  const ss = getDatabase_();
+  const sheet = ss.getSheetByName('Categories');
+  const rows = readSheetObjects_(ss, 'Categories');
+  if (rows.some(function(row) { return String(row.category_name || '').trim().toLowerCase() === name.toLowerCase() && isTruthy_(row.is_active); })) {
+    throw new Error('Kategori dengan nama tersebut sudah ada.');
+  }
+  const base = 'CAT_' + name.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 35);
+  const ids = rows.map(function(row) { return String(row.category_id || ''); });
+  let id = base, suffix = 2;
+  while (ids.indexOf(id) !== -1) id = base + '_' + suffix++;
+  sheet.appendRow([id, name, type, '', true]);
+  return { category_id: id, category_name: name, category_type: type, is_active: true };
+}
