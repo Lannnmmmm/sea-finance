@@ -49,6 +49,11 @@
     .category-form { display:grid; grid-template-columns:2fr 1fr auto; gap:8px; align-items:end; }
     .category-form label { display:flex; flex-direction:column; gap:6px; color:#475467; font-size:12px; font-weight:600; }
     .category-form input,.category-form select { width:100%; box-sizing:border-box; border:1px solid #d0d5dd; border-radius:8px; padding:10px; background:#fff; }
+
+    .category-admin { width:100%; border-collapse:collapse; margin-top:14px; font-size:12px; }
+    .category-admin input,.category-admin select { width:100%; min-width:105px; box-sizing:border-box; padding:7px; border:1px solid #d0d5dd; border-radius:6px; background:#fff; }
+    .category-admin .save-category { padding:7px 10px; white-space:nowrap; }
+    .category-inactive { opacity:.58; }
     @media(max-width:600px){.category-form{grid-template-columns:1fr}}
     @media (max-width:600px) { main { margin:16px auto; } .card { padding:16px; } }
 
@@ -73,6 +78,15 @@
       <button id="addCategoryBtn" type="button" onclick="createCategory()">Tambah kategori</button>
     </div>
     <div id="categoryStatus" class="muted" style="margin-top:10px">Memuat kategori…</div>
+    <details style="margin-top:18px">
+      <summary style="cursor:pointer;font-weight:600">Edit kategori & struktur induk-subkategori</summary>
+      <p class="muted">Perubahan disimpan langsung ke Google Sheets. Kategori yang dinonaktifkan tetap tersimpan untuk menjaga riwayat transaksi.</p>
+      <div style="overflow-x:auto"><table class="category-admin">
+        <thead><tr><th>Nama kategori</th><th>Jenis</th><th>Kategori induk</th><th>Aktif</th><th>Aksi</th></tr></thead>
+        <tbody id="categoryAdminRows"><tr><td colspan="5">Memuat…</td></tr></tbody>
+      </table></div>
+      <div id="categoryAdminStatus" class="muted" style="margin-top:8px"></div>
+    </details>
   </section>
   <section id="results" class="card" hidden>
     <h2>Hasil pemeriksaan</h2>
@@ -127,6 +141,7 @@
 </main>
 <script>
   loadCategories();
+  loadCategoryAdmin();
 
   if (window.pdfjsLib) {
     pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -147,6 +162,63 @@
     }).getActiveCategories();
   }
 
+
+  function loadCategoryAdmin() {
+    google.script.run.withSuccessHandler(renderCategoryAdmin)
+      .withFailureHandler(function(err) {
+        document.getElementById('categoryAdminStatus').textContent =
+          'Gagal memuat daftar kategori: ' + (err && err.message ? err.message : err);
+      }).getCategoryAdminList();
+  }
+
+  function renderCategoryAdmin(rows) {
+    const body = document.getElementById('categoryAdminRows');
+    if (!body) return;
+    const types = [
+      ['INCOME','Pendapatan'],['EXPENSE','Pengeluaran'],['TRANSFER','Transfer'],
+      ['ASSET','Aset'],['FEES','Biaya'],['TAX','Pajak']
+    ];
+    body.innerHTML = (rows || []).map(function(cat) {
+      const id = escapeHtml(cat.category_id);
+      const typeOptions = types.map(function(t) {
+        return '<option value="' + t[0] + '"' + (cat.category_type === t[0] ? ' selected' : '') + '>' + t[1] + '</option>';
+      }).join('');
+      const parentOptions = '<option value="">— Kategori utama —</option>' + (rows || []).filter(function(p) {
+        return p.category_id !== cat.category_id && p.category_type === cat.category_type && String(p.is_active).toUpperCase() !== 'FALSE';
+      }).map(function(p) {
+        return '<option value="' + escapeHtml(p.category_id) + '"' +
+          (cat.parent_category_id === p.category_id ? ' selected' : '') + '>' +
+          escapeHtml(p.category_name) + '</option>';
+      }).join('');
+      return '<tr class="' + (String(cat.is_active).toUpperCase() === 'FALSE' ? 'category-inactive' : '') + '">' +
+        '<td><input id="cat-name-' + id + '" maxlength="60" value="' + escapeHtml(cat.category_name) + '"></td>' +
+        '<td><select id="cat-type-' + id + '">' + typeOptions + '</select></td>' +
+        '<td><select id="cat-parent-' + id + '">' + parentOptions + '</select></td>' +
+        '<td style="text-align:center"><input id="cat-active-' + id + '" type="checkbox" style="width:auto" ' +
+          (String(cat.is_active).toUpperCase() !== 'FALSE' ? 'checked' : '') + '></td>' +
+        '<td><button class="save-category" type="button" onclick="saveCategory(\'' + id + '\')">Simpan</button></td></tr>';
+    }).join('') || '<tr><td colspan="5">Belum ada kategori.</td></tr>';
+    document.getElementById('categoryAdminStatus').textContent = (rows || []).length + ' kategori terdaftar.';
+  }
+
+  function saveCategory(id) {
+    const patch = {
+      category_name: document.getElementById('cat-name-' + id).value,
+      category_type: document.getElementById('cat-type-' + id).value,
+      parent_category_id: document.getElementById('cat-parent-' + id).value,
+      is_active: document.getElementById('cat-active-' + id).checked
+    };
+    document.getElementById('categoryAdminStatus').textContent = 'Menyimpan perubahan…';
+    google.script.run.withSuccessHandler(function() {
+      document.getElementById('categoryAdminStatus').textContent = 'Kategori berhasil diperbarui.';
+      loadCategories();
+      loadCategoryAdmin();
+    }).withFailureHandler(function(err) {
+      document.getElementById('categoryAdminStatus').textContent =
+        'Gagal menyimpan: ' + (err && err.message ? err.message : err);
+    }).updateCategory(id, patch);
+  }
+
   function createCategory() {
     const name = document.getElementById('newCategoryName').value.trim();
     const type = document.getElementById('newCategoryType').value;
@@ -157,8 +229,9 @@
     }
     button.disabled = true;
     google.script.run.withSuccessHandler(function(category) {
-      categoryOptions.push(category);
       document.getElementById('newCategoryName').value = '';
+      loadCategories();
+      loadCategoryAdmin();
       document.getElementById('categoryStatus').textContent = 'Kategori "' + category.category_name + '" berhasil ditambahkan.';
       button.disabled = false;
     }).withFailureHandler(function(err) {
