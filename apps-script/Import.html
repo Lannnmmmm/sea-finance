@@ -96,8 +96,9 @@
       <span id="transactionCount" class="muted"></span>
     </div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0">
+      <button id="exportAllBtn" type="button" onclick="exportAllCsv()" disabled>Ekspor Semua Transaksi (.CSV)</button>
       <button id="exportReviewBtn" type="button" onclick="exportReviewCsv()" disabled>Ekspor REVIEW (.CSV)</button>
-      <span class="muted">Mengunduh semua transaksi berstatus REVIEW dari hasil preview, tidak terpengaruh filter tabel.</span>
+      <span class="muted">Ekspor tidak terpengaruh filter tabel. Semua transaksi mencakup AUTO, REVIEW, dan koreksi MANUAL.</span>
     </div>
     <p class="muted">Kategori otomatis berasal dari sheet Rules. Transaksi yang belum cocok masuk REVIEW. Tahap ini hanya preview; belum ada transaksi yang disimpan.</p>
     <div id="classificationInfo" class="status" style="margin:12px 0"></div>
@@ -374,6 +375,7 @@
     document.getElementById('classificationInfo').textContent =
       'Klasifikasi otomatis: ' + classification.auto.toLocaleString('id-ID') +
       ' · Perlu review: ' + classification.review.toLocaleString('id-ID');
+    document.getElementById('exportAllBtn').disabled = allTransactions.length === 0;
     document.getElementById('exportReviewBtn').disabled =
       !allTransactions.some(function(tx) { return tx.classificationStatus === 'REVIEW'; });
 
@@ -387,6 +389,15 @@
     document.getElementById('previewBtn').disabled = false;
   }
 
+  function exportAllCsv() {
+    const rows = allTransactions;
+    if (!rows.length) {
+      setStatus('Tidak ada transaksi untuk diekspor.', 'review');
+      return;
+    }
+    downloadTransactionsCsv(rows, 'sea-finance-all-');
+  }
+
   function exportReviewCsv() {
     const rows = allTransactions.filter(function(tx) {
       return tx.classificationStatus === 'REVIEW';
@@ -395,7 +406,10 @@
       setStatus('Tidak ada transaksi berstatus REVIEW untuk diekspor.', 'review');
       return;
     }
+    downloadTransactionsCsv(rows, 'sea-finance-review-');
+  }
 
+  function downloadTransactionsCsv(rows, filenamePrefix) {
     const headers = [
       'statement_serial','transaction_date','description_raw','transaction_type',
       'amount_idr','direction','balance_after_idr','category_id','category_name',
@@ -421,12 +435,12 @@
     const link = document.createElement('a');
     const date = new Date().toISOString().slice(0, 10);
     link.href = url;
-    link.download = 'sea-finance-review-' + date + '.csv';
+    link.download = filenamePrefix + date + '.csv';
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-    setStatus(rows.length.toLocaleString('id-ID') + ' transaksi REVIEW berhasil disiapkan untuk diunduh.', 'ok');
+    setStatus(rows.length.toLocaleString('id-ID') + ' transaksi disiapkan untuk diunduh.', 'ok');
   }
 
   function metric(label, value) {
