@@ -63,6 +63,66 @@ function getAppBootstrap() {
 }
 
 /**
+ * Klasifikasi preview berdasarkan Rules sheet.
+ * Tidak menyimpan atau mengubah data transaksi.
+ */
+function classifyPreviewResult(result) {
+  if (!result || !Array.isArray(result.statements)) {
+    throw new Error('Hasil preview tidak valid.');
+  }
+  const ss = getDatabase_();
+  const rules = readSheetObjects_(ss, 'Rules')
+    .filter(function(rule) { return isTruthy_(rule.is_active); })
+    .sort(function(a, b) { return Number(a.priority || 9999) - Number(b.priority || 9999); });
+  const categories = {};
+  readSheetObjects_(ss, 'Categories').forEach(function(category) {
+    categories[String(category.category_id)] = category.category_name;
+  });
+
+  let autoCount = 0;
+  let reviewCount = 0;
+  result.statements.forEach(function(statement) {
+    (statement.transactions || []).forEach(function(tx) {
+      const description = String(tx.descriptionRaw || '').toUpperCase();
+      const bankType = String(tx.transactionType || '').toUpperCase();
+      let matched = null;
+
+      for (let i = 0; i < rules.length; i++) {
+        const rule = rules[i];
+        const field = String(rule.match_field || '').toLowerCase();
+        const source = field === 'transaction_type' ? bankType :
+          field === 'direction' ? String(tx.direction || '').toUpperCase() : description;
+        const expected = String(rule.match_value || '').toUpperCase();
+        const operator = String(rule.match_operator || 'CONTAINS').toUpperCase();
+        let hit = false;
+        if (operator === 'CONTAINS') hit = source.indexOf(expected) !== -1;
+        else if (operator === 'EQUALS') hit = source === expected;
+        else if (operator === 'STARTS_WITH') hit = source.indexOf(expected) === 0;
+        if (hit) { matched = rule; break; }
+      }
+
+      if (matched) {
+        tx.categoryId = String(matched.category_id || '');
+        tx.categoryName = categories[tx.categoryId] || 'Kategori tidak ditemukan';
+        tx.classifiedType = String(matched.transaction_type || tx.transactionType || '');
+        tx.classificationStatus = isTruthy_(matched.requires_review) ? 'REVIEW' : 'AUTO';
+        tx.classificationRule = String(matched.rule_id || '');
+      } else {
+        tx.categoryId = '';
+        tx.categoryName = 'Belum diklasifikasi';
+        tx.classifiedType = bankType;
+        tx.classificationStatus = 'REVIEW';
+        tx.classificationRule = '';
+      }
+      if (tx.classificationStatus === 'AUTO') autoCount++;
+      else reviewCount++;
+    });
+  });
+  result.classificationSummary = { auto: autoCount, review: reviewCount };
+  return result;
+}
+
+/**
  * Mengambil transaksi dengan filter opsional.
  * options: {status, limit}
  */
