@@ -80,11 +80,11 @@
           <option value="UNKNOWN">Tidak diketahui</option>
         </select>
       </label>
-      <label>Status
+      <label>Status klasifikasi
         <select id="statusFilter">
           <option value="">Semua status</option>
-          <option value="OK">VALID</option>
-          <option value="REVIEW">REVIEW</option>
+          <option value="AUTO">Otomatis</option>
+          <option value="REVIEW">Perlu review</option>
         </select>
       </label>
       <label>Cari deskripsi / tanggal
@@ -282,7 +282,7 @@
     return allTransactions.filter(function(tx) {
       if (month && tx.transactionDate.slice(0, 7) !== month) return false;
       if (direction && tx.direction !== direction) return false;
-      if (status && tx.validation !== status) return false;
+      if (status && tx.classificationStatus !== status) return false;
       if (query && (tx.descriptionRaw + ' ' + tx.transactionDate + ' ' + tx.statementSerial)
           .toLowerCase().indexOf(query) === -1) return false;
       return true;
