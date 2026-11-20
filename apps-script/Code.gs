@@ -93,6 +93,8 @@ function classifyPreviewResult(result) {
         const source = field === 'transaction_type' ? bankType :
           field === 'direction' ? String(tx.direction || '').toUpperCase() : description;
         const expected = String(rule.match_value || '').toUpperCase();
+        const requiredDirection = String(rule.direction || '').toUpperCase();
+        if (requiredDirection && requiredDirection !== String(tx.direction || '').toUpperCase()) continue;
         const operator = String(rule.match_operator || 'CONTAINS').toUpperCase();
         let hit = false;
         if (operator === 'CONTAINS') hit = source.indexOf(expected) !== -1;
