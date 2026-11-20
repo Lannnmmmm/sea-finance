@@ -152,7 +152,10 @@ function seedDefaults_(ss) {
   const rules = [
     ['RULE_001',1,'description_raw','CONTAINS','PAJAK BUNGA','EXP_TAX','EXPENSE',false,true,'Contoh awal; sesuaikan dengan deskripsi statement'],
     ['RULE_002',2,'description_raw','CONTAINS','BIAYA ADMIN','EXP_ADMIN','EXPENSE',false,true,'Contoh awal; sesuaikan dengan deskripsi statement'],
-    ['RULE_003',3,'description_raw','CONTAINS','BUNGA','INC_INTEREST','INCOME',false,true,'Contoh awal; sesuaikan dengan deskripsi statement']
+    ['RULE_003',3,'description_raw','CONTAINS','BUNGA','INC_INTEREST','INCOME',false,true,'Contoh awal; sesuaikan dengan deskripsi statement'],
+    ['RULE_004',4,'description_raw','CONTAINS','SAVINGS INTEREST','INC_INTEREST','INCOME',false,true,'Bunga tabungan SeaBank'],
+    ['RULE_005',5,'description_raw','CONTAINS','SAVINGS WITHHOLDING TAX','EXP_TAX','TAX',false,true,'Pajak atas bunga tabungan SeaBank'],
+    ['RULE_006',6,'description_raw','CONTAINS','AAN MAULANA BRI 023001095396506','TR_INTERNAL','TRANSFER_INTERNAL',false,true,'Transfer ke rekening BRI milik sendiri yang telah dikonfirmasi pengguna']
   ];
 
   const settings = [
