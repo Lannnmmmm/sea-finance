@@ -10,7 +10,7 @@ const SF_SHEETS = {
   Transactions: [
     'transaction_id','transaction_date','description_raw','transaction_type',
     'direction','amount_idr','balance_after_idr','category_id','counterparty',
-    'classification_status','import_id','transaction_hash','notes'
+    'classification_status','import_id','transaction_hash','notes','transfer_purpose'
   ],
   Imports: [
     'import_id','source_file_id','statement_serial','period_start','period_end',
@@ -22,7 +22,7 @@ const SF_SHEETS = {
   ],
   Rules: [
     'rule_id','priority','match_field','match_operator','match_value',
-    'category_id','transaction_type','requires_review','is_active','notes'
+    'category_id','transaction_type','requires_review','is_active','notes','direction'
   ],
   Settings: ['setting_key','setting_value','description'],
   TimeDeposits: [
@@ -137,7 +137,10 @@ function seedDefaults_(ss) {
   const categories = [
     ['INC_SALARY','Gaji','INCOME','',true],
     ['INC_INTEREST','Bunga tabungan/deposito','INCOME','',true],
-    ['INC_OTHER','Pemasukan Lainnya','INCOME','',true],
+    ['INC_OTHER','Pendapatan Lainnya (perlu rincian)','INCOME','',true],
+    ['INC_DRIVER','Pendapatan Driver','INCOME','',true],
+    ['INC_TECH_SERVICE','Jasa Teknologi','INCOME','',true],
+    ['INC_FREELANCE','Pendapatan Freelance','INCOME','',true],
     ['EXP_FOOD','Makanan & Minuman','EXPENSE','',true],
     ['EXP_TRANSPORT','Transportasi','EXPENSE','',true],
     ['EXP_BILLS','Tagihan & Utilitas','EXPENSE','',true],
@@ -159,9 +162,9 @@ function seedDefaults_(ss) {
     ['RULE_003',3,'description_raw','CONTAINS','BUNGA','INC_INTEREST','INCOME',false,true,'Contoh awal; sesuaikan dengan deskripsi statement'],
     ['RULE_004',4,'description_raw','CONTAINS','SAVINGS INTEREST','INC_INTEREST','INCOME',false,true,'Bunga tabungan SeaBank'],
     ['RULE_005',5,'description_raw','CONTAINS','SAVINGS WITHHOLDING TAX','EXP_TAX','TAX',false,true,'Pajak atas bunga tabungan SeaBank'],
-    ['RULE_006',6,'description_raw','CONTAINS','AAN MAULANA BRI 023001095396506','TR_INTERNAL','TRANSFER_INTERNAL',false,true,'Transfer ke rekening BRI milik sendiri yang telah dikonfirmasi pengguna'],
-    ['RULE_007',7,'description_raw','EQUALS','DANA','TR_INTERNAL','TRANSFER_INTERNAL',false,true,'Pencairan saldo DANA milik sendiri ke SeaBank'],
-    ['RULE_008',8,'description_raw','EQUALS','SHOPEEPAY','TR_INTERNAL','TRANSFER_INTERNAL',false,true,'Pencairan saldo ShopeePay milik sendiri ke SeaBank'],
+    ['RULE_006',6,'description_raw','CONTAINS','AAN MAULANA BRI 023001095396506','TR_INTERNAL','TRANSFER_INTERNAL',true,true,'Transfer ke BRI milik sendiri; tujuan penggunaan perlu dipilih saat review','OUT'],
+    ['RULE_007',7,'description_raw','EQUALS','DANA','INC_OTHER','INCOME',true,true,'Dana masuk dari e-wallet; sumber pendapatan perlu dirinci saat review','IN'],
+    ['RULE_008',8,'description_raw','EQUALS','SHOPEEPAY','INC_OTHER','INCOME',true,true,'ShopeePay masuk; sumber pendapatan perlu dirinci saat review','IN'],
     ['RULE_009',9,'description_raw','CONTAINS','AFRIZAL JUNAEDI','TR_EXTERNAL','TRANSFER',false,true,'Transfer dengan pihak lain; bukan transfer internal'],
     ['RULE_010',10,'description_raw','CONTAINS','CC VAPOR','EXP_VAPE','EXPENSE',false,true,'Belanja pribadi rokok elektrik'],
     ['RULE_011',11,'description_raw','CONTAINS','QUARTER VAPE STORE','EXP_VAPE','EXPENSE',false,true,'Belanja pribadi rokok elektrik'],
@@ -180,6 +183,7 @@ function seedDefaults_(ss) {
 
   seedRowsIfMissing_(ss.getSheetByName('Categories'), categories, 1);
   seedRowsIfMissing_(ss.getSheetByName('Rules'), rules, 1);
+  migrateConfirmedRules_(ss.getSheetByName('Rules'));
   seedRowsIfMissing_(ss.getSheetByName('Settings'), settings, 1);
 }
 
@@ -194,6 +198,37 @@ function seedRowsIfMissing_(sheet, rows, keyColumn) {
       sheet.appendRow(row);
     }
   });
+}
+
+/**
+ * Update only the three rules whose meaning was explicitly reconfirmed.
+ * This avoids overwriting unrelated user-customized rules.
+ */
+function migrateConfirmedRules_(sheet) {
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) return;
+  const headers = values[0].map(function(v) { return String(v).trim(); });
+  const col = {};
+  headers.forEach(function(h, i) { col[h] = i; });
+  const updates = {
+    RULE_006: { category_id: 'TR_INTERNAL', transaction_type: 'TRANSFER_INTERNAL',
+      requires_review: true, direction: 'OUT',
+      notes: 'Transfer ke BRI milik sendiri; tujuan penggunaan perlu dipilih saat review' },
+    RULE_007: { category_id: 'INC_OTHER', transaction_type: 'INCOME',
+      requires_review: true, direction: 'IN',
+      notes: 'Dana masuk dari e-wallet; sumber pendapatan perlu dirinci saat review' },
+    RULE_008: { category_id: 'INC_OTHER', transaction_type: 'INCOME',
+      requires_review: true, direction: 'IN',
+      notes: 'ShopeePay masuk; sumber pendapatan perlu dirinci saat review' }
+  };
+  for (let r = 1; r < values.length; r++) {
+    const id = String(values[r][col.rule_id] || '');
+    const patch = updates[id];
+    if (!patch) continue;
+    Object.keys(patch).forEach(function(key) {
+      if (col[key] !== undefined) sheet.getRange(r + 1, col[key] + 1).setValue(patch[key]);
+    });
+  }
 }
 
 function logSetup_(ss, action, sheetName, detail) {
