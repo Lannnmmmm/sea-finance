@@ -66,7 +66,8 @@
       <h2>Detail transaksi</h2>
       <span id="transactionCount" class="muted"></span>
     </div>
-    <p class="muted">Data di bawah adalah hasil ekstraksi asli. Kategori belum ditentukan dan belum ada transaksi yang disimpan.</p>
+    <p class="muted">Kategori otomatis berasal dari sheet Rules. Transaksi yang belum cocok masuk REVIEW. Tahap ini hanya preview; belum ada transaksi yang disimpan.</p>
+    <div id="classificationInfo" class="status" style="margin:12px 0"></div>
     <div class="toolbar">
       <label>Bulan
         <select id="monthFilter"><option value="">Semua bulan</option></select>
@@ -171,7 +172,17 @@
       }
       setStatus('Teks berhasil diekstrak. Mengirim ke parser…');
       google.script.run
-        .withSuccessHandler(renderResult)
+        .withSuccessHandler(function(result) {
+          setStatus('Validasi selesai. Menjalankan klasifikasi aturan…');
+          google.script.run
+            .withSuccessHandler(renderResult)
+            .withFailureHandler(function(err) {
+              setStatus('Klasifikasi gagal; menampilkan hasil parsing tanpa kategori: ' +
+                (err && err.message ? err.message : err), 'review');
+              renderResult(result);
+            })
+            .classifyPreviewResult(result);
+        })
         .withFailureHandler(function(err) {
           setStatus('Parser gagal: ' + (err && err.message ? err.message : err), 'review');
           button.disabled = false;
@@ -225,11 +236,18 @@
           direction: tx.direction || 'UNKNOWN',
           balanceAfter: tx.balanceAfter,
           validation: tx.validation || 'REVIEW',
+          categoryName: tx.categoryName || 'Belum diklasifikasi',
+          classificationStatus: tx.classificationStatus || 'REVIEW',
           statementSerial: statement.statementSerial || '',
           periodStart: statement.periodStart || ''
         });
       });
     });
+    const classification = result.classificationSummary || { auto: 0, review: allTransactions.length };
+    document.getElementById('classificationInfo').textContent =
+      'Klasifikasi otomatis: ' + classification.auto.toLocaleString('id-ID') +
+      ' · Perlu review: ' + classification.review.toLocaleString('id-ID');
+
     allTransactions.sort(function(a, b) {
       return (a.transactionDate || '').localeCompare(b.transactionDate || '');
     });
@@ -295,7 +313,9 @@
           '<td class="amount">' + rupiah(tx.amount) + '</td>' +
           '<td><span class="pill ' + directionClass + '">' + directionLabel + '</span></td>' +
           '<td class="balance">' + rupiah(tx.balanceAfter) + '</td>' +
-          '<td><span class="muted">Belum diklasifikasi</span></td>' +
+          '<td>' + escapeHtml(tx.categoryName) + ' <span class="pill ' +
+            (tx.classificationStatus === 'AUTO' ? 'in' : 'review') + '">' +
+            escapeHtml(tx.classificationStatus) + '</span></td>' +
           '<td><span class="pill ' + (tx.validation === 'OK' ? 'in' : 'review') + '">' + statusLabel + '</span></td>' +
           '</tr>';
       }).join('');
