@@ -95,6 +95,10 @@
       <h2>Detail transaksi</h2>
       <span id="transactionCount" class="muted"></span>
     </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0">
+      <button id="exportReviewBtn" type="button" onclick="exportReviewCsv()" disabled>Ekspor REVIEW (.CSV)</button>
+      <span class="muted">Mengunduh semua transaksi berstatus REVIEW dari hasil preview, tidak terpengaruh filter tabel.</span>
+    </div>
     <p class="muted">Kategori otomatis berasal dari sheet Rules. Transaksi yang belum cocok masuk REVIEW. Tahap ini hanya preview; belum ada transaksi yang disimpan.</p>
     <div id="classificationInfo" class="status" style="margin:12px 0"></div>
     <div class="toolbar">
@@ -370,6 +374,8 @@
     document.getElementById('classificationInfo').textContent =
       'Klasifikasi otomatis: ' + classification.auto.toLocaleString('id-ID') +
       ' · Perlu review: ' + classification.review.toLocaleString('id-ID');
+    document.getElementById('exportReviewBtn').disabled =
+      !allTransactions.some(function(tx) { return tx.classificationStatus === 'REVIEW'; });
 
     allTransactions.sort(function(a, b) {
       return (a.transactionDate || '').localeCompare(b.transactionDate || '');
@@ -379,6 +385,48 @@
     renderTransactions();
     setStatus('Pemeriksaan selesai. Tidak ada data transaksi yang disimpan.', result.ok ? 'ok' : 'review');
     document.getElementById('previewBtn').disabled = false;
+  }
+
+  function exportReviewCsv() {
+    const rows = allTransactions.filter(function(tx) {
+      return tx.classificationStatus === 'REVIEW';
+    });
+    if (!rows.length) {
+      setStatus('Tidak ada transaksi berstatus REVIEW untuk diekspor.', 'review');
+      return;
+    }
+
+    const headers = [
+      'statement_serial','transaction_date','description_raw','transaction_type',
+      'amount_idr','direction','balance_after_idr','category_id','category_name',
+      'classification_status','validation_status','transfer_purpose'
+    ];
+    function safeCell(value) {
+      let text = value === null || value === undefined ? '' : String(value);
+      if (/^[\\s]*[=+@-]/.test(text)) text = "'" + text;
+      return '"' + text.replace(/"/g, '""') + '"';
+    }
+    const lines = [headers.join(',')];
+    rows.forEach(function(tx) {
+      lines.push([
+        tx.statementSerial, tx.transactionDate, tx.descriptionRaw, tx.transactionType,
+        tx.amount, tx.direction, tx.balanceAfter, tx.categoryId, tx.categoryName,
+        tx.classificationStatus, tx.validation, tx.transferPurpose
+      ].map(safeCell).join(','));
+    });
+
+    const csv = '\\uFEFF' + lines.join('\\r\\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = 'sea-finance-review-' + date + '.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setStatus(rows.length.toLocaleString('id-ID') + ' transaksi REVIEW berhasil disiapkan untuk diunduh.', 'ok');
   }
 
   function metric(label, value) {
