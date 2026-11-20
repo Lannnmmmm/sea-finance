@@ -79,6 +79,7 @@ Kolom minimum:
 - import_id
 - transaction_hash
 - notes
+- transfer_purpose (opsional: CASH_WITHDRAWAL, INSTALLMENT, OTHER)
 
 Simpan nilai uang sebagai integer Rupiah, bukan floating point.
 
@@ -113,6 +114,7 @@ Simpan nilai uang sebagai integer Rupiah, bukan floating point.
 - transaction_type
 - requires_review
 - is_active
+- direction (opsional; membatasi aturan ke transaksi IN atau OUT)
 
 ### TimeDeposits
 - deposit_id
@@ -144,7 +146,9 @@ Jangan samakan total outgoing/incoming dari statement dengan pengeluaran/pendapa
 - Penempatan/pencairan deposito adalah perpindahan aset, bukan pengeluaran/pendapatan.
 - Deposito dan saldo tabungan dilaporkan sebagai aset terpisah.
 
-Rekening BRI tujuan dengan nama AAN MAULANA telah dikonfirmasi pengguna sebagai rekening milik sendiri. Transaksi SeaBank ke rekening BRI tersebut diklasifikasikan sebagai TRANSFER_INTERNAL, bukan beban. Jika kelak ada rekening tujuan lain, kepemilikannya harus dikonfirmasi sebelum aturan otomatis dibuat.
+Rekening BRI tujuan dengan nama AAN MAULANA telah dikonfirmasi pengguna sebagai rekening milik sendiri. Transaksi SeaBank ke rekening BRI tersebut tetap TRANSFER_INTERNAL, bukan beban. Namun, tujuan alokasi dananya perlu direview dengan label CASH_WITHDRAWAL (ambil tunai), INSTALLMENT (dana untuk cicilan), atau OTHER (kebutuhan lain). Transfer ke BRI tidak otomatis menjadi pengeluaran; beban dicatat ketika uang benar-benar digunakan. Jika transaksi BRI kelak ikut diimpor, transfer SeaBank→BRI dan transaksi pembayaran/penarikan di BRI harus dipasangkan agar tidak dihitung dua kali.
+
+Dana masuk berdeskripsi DANA atau ShopeePay diarahkan ke INCOME dengan kategori sementara Pendapatan Lainnya dan status REVIEW. Sumbernya dapat berupa gaji, pendapatan ShopeeFood, jasa teknologi, freelance, atau sumber lain. Kategori sumber dapat dipilih saat review; pencairan saldo milik sendiri tetap harus diklasifikasikan sebagai TRANSFER_INTERNAL. Aturan klasifikasi harus mempertimbangkan arah transaksi, bukan hanya nama merchant.
 
 ## 7. Rekonsiliasi dan kualitas data
 
