@@ -45,6 +45,10 @@
     .pager button:disabled { opacity:.4; }
     .empty { padding:24px; text-align:center; color:#667085; }
     .section-heading { display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; }
+    .category-form { display:grid; grid-template-columns:2fr 1fr auto; gap:8px; align-items:end; }
+    .category-form label { display:flex; flex-direction:column; gap:6px; color:#475467; font-size:12px; font-weight:600; }
+    .category-form input,.category-form select { width:100%; box-sizing:border-box; border:1px solid #d0d5dd; border-radius:8px; padding:10px; background:#fff; }
+    @media(max-width:600px){.category-form{grid-template-columns:1fr}}
     @media (max-width:600px) { main { margin:16px auto; } .card { padding:16px; } }
 
   </style>
@@ -58,6 +62,16 @@
     <button id="previewBtn" onclick="previewPdf()">Baca & Validasi PDF</button>
     <div id="status" class="status">Menunggu file PDF.</div>
     <p class="muted">PDF diproses di browser menggunakan PDF.js. Teks hasil ekstraksi dikirim ke Apps Script untuk parsing dan validasi.</p>
+  </section>
+  <section class="card">
+    <h2>Kelola kategori</h2>
+    <p class="muted">Tambahkan kategori pendapatan atau pengeluaran tanpa mengubah kode program.</p>
+    <div class="category-form">
+      <label>Nama kategori<input id="newCategoryName" maxlength="60" placeholder="Contoh: Pendapatan ShopeeFood"></label>
+      <label>Jenis kategori<select id="newCategoryType"><option value="INCOME">Pendapatan</option><option value="EXPENSE">Pengeluaran</option><option value="TRANSFER">Transfer</option><option value="ASSET">Aset</option><option value="FEES">Biaya</option><option value="TAX">Pajak</option></select></label>
+      <button id="addCategoryBtn" type="button" onclick="createCategory()">Tambah kategori</button>
+    </div>
+    <div id="categoryStatus" class="muted" style="margin-top:10px">Memuat kategori…</div>
   </section>
   <section id="results" class="card" hidden>
     <h2>Hasil pemeriksaan</h2>
@@ -111,14 +125,46 @@
   </section>
 </main>
 <script>
+  loadCategories();
+
   if (window.pdfjsLib) {
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   }
 
   let allTransactions = [];
+  let categoryOptions = [];
   let currentPage = 1;
   const pageSize = 50;
+
+  function loadCategories() {
+    google.script.run.withSuccessHandler(function(rows) {
+      categoryOptions = rows || [];
+      document.getElementById('categoryStatus').textContent = categoryOptions.length + ' kategori tersedia.';
+    }).withFailureHandler(function(err) {
+      document.getElementById('categoryStatus').textContent = 'Gagal memuat kategori: ' + (err && err.message ? err.message : err);
+    }).getActiveCategories();
+  }
+
+  function createCategory() {
+    const name = document.getElementById('newCategoryName').value.trim();
+    const type = document.getElementById('newCategoryType').value;
+    const button = document.getElementById('addCategoryBtn');
+    if (!name) {
+      document.getElementById('categoryStatus').textContent = 'Isi nama kategori terlebih dahulu.';
+      return;
+    }
+    button.disabled = true;
+    google.script.run.withSuccessHandler(function(category) {
+      categoryOptions.push(category);
+      document.getElementById('newCategoryName').value = '';
+      document.getElementById('categoryStatus').textContent = 'Kategori "' + category.category_name + '" berhasil ditambahkan.';
+      button.disabled = false;
+    }).withFailureHandler(function(err) {
+      document.getElementById('categoryStatus').textContent = err && err.message ? err.message : String(err);
+      button.disabled = false;
+    }).addCategory(name, type);
+  }
 
   function setStatus(message, kind) {
     const el = document.getElementById('status');
