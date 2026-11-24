@@ -122,6 +122,11 @@ function parsePage(lines, year, carry){
           carry.current.transaction=clean(carry.current.transaction.replace(new RegExp('\\b'+bank[1]+'\\b','ig'),''));
         }
         if(acct) {
+          const bankInName=carry.current.transaction.match(/\b(BRI|BCA|BNI|MANDIRI|CIMB|DANAMON|PERMATA|BSI|DANA|GOPAY|OVO|SHOPEEPAY|LINKAJA)\b/i);
+          if(bankInName) {
+            carry.current.account=clean([carry.current.account,bankInName[1].toUpperCase()].filter(Boolean).join(' '));
+            carry.current.transaction=clean(carry.current.transaction.replace(new RegExp('\\b'+bankInName[1]+'\\b','ig'),''));
+          }
           if(carry.current.account && !/\d{5,16}/.test(carry.current.account)) carry.current.account+=' '+acct[0];
           else if(!carry.current.account) carry.current.account=acct[0];
         }
