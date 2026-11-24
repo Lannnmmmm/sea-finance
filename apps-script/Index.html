@@ -79,7 +79,7 @@ function splitDesc(lines){
   for(let i=0;i<candidates.length;i++){
     const value=candidates[i];
     if(/^(BRI|BCA|BNI|MANDIRI|CIMB|DANAMON|PERMATA|BSI|DANA|GOPAY|OVO|SHOPEEPAY|LINKAJA)$/i.test(value) &&
-       i+1<candidates.length && /^\\d{5,16}$/.test(candidates[i+1])){
+       i+1<candidates.length && /^\d{5,16}$/.test(candidates[i+1])){
       accounts.push(value+' '+candidates[++i]);
     } else if(accountCandidate(value)) {
       accounts.push(value);
