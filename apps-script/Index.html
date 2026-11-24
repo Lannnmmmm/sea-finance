@@ -121,9 +121,9 @@ function parsePage(lines, year, carry){
 }
 
 function parseStatementGroup(reference, pages) {
-  const firstText=pages[0].map(x=>x.text).join('\\n');
-  const period=firstText.match(/(\\d{2})\\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\\s+2026\\s+to\\s+(\\d{2})\\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\\s+2026/i);
-  const totals=firstText.match(/SAVINGS\\s+([\\d,.]+)\\s+([\\d,.]+)\\s+([\\d,.]+)\\s+([\\d,.]+)/i);
+  const firstText=pages[0].map(x=>x.text).join('\n');
+  const period=firstText.match(/(\d{2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+2026\s+to\s+(\d{2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+2026/i);
+  const totals=firstText.match(/SAVINGS\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)/i);
   if(!period || !totals) throw new Error('Ringkasan tidak terbaca untuk '+reference);
   const startDate=toDate(period[1],period[2].toUpperCase(),2026), endDate=toDate(period[3],period[4].toUpperCase(),2026);
   const openingBalance=money(totals[1]), totalOutgoing=money(totals[2]), totalIncoming=money(totals[3]), endingBalance=money(totals[4]);
@@ -146,7 +146,7 @@ async function readPdf(){
     const groups=new Map();
     for(let n=1;n<=pdf.numPages;n++){
       const lines=await pageLines(await pdf.getPage(n));
-      const hit=lines.map(x=>x.text).join(' ').match(/S\\/N\\s+(S\\d{2}-\\d{6}[A-Z0-9]{8})/);
+      const hit=lines.map(x=>x.text).join(' ').match(/S\/N\s+(S\d{2}-\d{6}[A-Z0-9]{8})/);
       if(hit){if(!groups.has(hit[1]))groups.set(hit[1],[]);groups.get(hit[1]).push(lines);}
     }
     if(!groups.size)throw new Error('Nomor statement tidak ditemukan di PDF.');
