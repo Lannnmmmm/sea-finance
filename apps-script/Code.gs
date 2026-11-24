@@ -143,10 +143,10 @@ function importStatements(payload) {
   }finally{lock.releaseLock();}
 }
 function validateImportPayload_(p) {
-  if(!p||!/^S\\d{2}-\\d{6}[A-Z0-9]{8}$/.test(String(p.reference||'')))throw new Error('Nomor reference statement tidak valid: '+(p&&p.reference||''));
+  if(!p||!/^S\d{2}-\d{6}[A-Z0-9]{8}$/.test(String(p.reference||'')))throw new Error('Nomor reference statement tidak valid: '+(p&&p.reference||''));
   if(!Array.isArray(p.transactions)||!p.transactions.length)throw new Error('Tidak ada transaksi: '+p.reference);
   p.transactions.forEach((t,i)=>{
-    if(!/^2026-\\d{2}-\\d{2}$/.test(String(t.date||''))||!Number.isFinite(Number(t.outgoing||0))||!Number.isFinite(Number(t.incoming||0))||!Number.isFinite(Number(t.endingBalance))||Number(t.outgoing||0)<0||Number(t.incoming||0)<0)throw new Error('Data transaksi tidak valid pada '+p.reference+', baris '+(i+1));
+    if(!/^2026-\d{2}-\d{2}$/.test(String(t.date||''))||!Number.isFinite(Number(t.outgoing||0))||!Number.isFinite(Number(t.incoming||0))||!Number.isFinite(Number(t.endingBalance))||Number(t.outgoing||0)<0||Number(t.incoming||0)<0)throw new Error('Data transaksi tidak valid pada '+p.reference+', baris '+(i+1));
   });
   const outgoing=p.transactions.reduce((s,t)=>s+Number(t.outgoing||0),0), incoming=p.transactions.reduce((s,t)=>s+Number(t.incoming||0),0), last=p.transactions[p.transactions.length-1];
   if(outgoing!==Number(p.totalOutgoing))throw new Error('Total outgoing tidak cocok: '+p.reference);
