@@ -109,10 +109,26 @@ function parsePage(lines, year, carry){
     if(!active) continue;
     const m=txt.match(/^(\d{1,2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/i);
     if(!m) {
-      if(txt && !/^(page \d+|BANK STATEMENT|S\/N )/i.test(txt) && !isType(txt)) carry.pending.push(line);
       if(isType(txt) && carry.current){
         carry.current.transactionType=txt;
         out.push(carry.current); carry.current=null; carry.pending=[];
+      } else if(carry.current && txt) {
+        // Detail rows after the dated row belong to the active transaction.
+        // Bank and account number are often printed on separate rows.
+        const bank=txt.match(/\b(BRI|BCA|BNI|MANDIRI|CIMB|DANAMON|PERMATA|BSI|DANA|GOPAY|OVO|SHOPEEPAY|LINKAJA)\b/i);
+        const acct=txt.match(/\b\d{5,16}\b/);
+        if(bank) {
+          carry.current.account=clean([carry.current.account,bank[1].toUpperCase()].filter(Boolean).join(' '));
+          carry.current.transaction=clean(carry.current.transaction.replace(new RegExp('\\b'+bank[1]+'\\b','ig'),''));
+        }
+        if(acct) {
+          if(carry.current.account && !/\d{5,16}/.test(carry.current.account)) carry.current.account+=' '+acct[0];
+          else if(!carry.current.account) carry.current.account=acct[0];
+        }
+        const remainder=clean(txt.replace(/\b(BRI|BCA|BNI|MANDIRI|CIMB|DANAMON|PERMATA|BSI|DANA|GOPAY|OVO|SHOPEEPAY|LINKAJA)\b/ig,'').replace(/\b\d{5,16}\b/g,''));
+        if(remainder && !/^[-.]+$/.test(remainder)) carry.current.transaction=clean(carry.current.transaction+' '+remainder);
+      } else if(txt && !/^(page \d+|BANK STATEMENT|S\/N )/i.test(txt)) {
+        carry.pending.push(line);
       }
       continue;
     }
