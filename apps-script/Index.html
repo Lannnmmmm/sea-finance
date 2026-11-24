@@ -138,7 +138,7 @@ async function readPdf(){
     }
     const period=summaryText.match(/(\d{2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+2026\s+to\s+(\d{2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+2026/i);
     const opening=summaryText.match(/SAVINGS\s+[\d,.]+\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)/i);
-    const totals=summaryText.match(/SAVINGS\s+[\d,.]+\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)/i);
+    const totals=summaryText.match(/SAVINGS\\s+([\\d,.]+)\\s+([\\d,.]+)\\s+([\\d,.]+)\\s+([\\d,.]+)/i);
     if(!serial || !period || !totals) throw new Error('Nomor statement atau ringkasan saldo tidak terbaca.');
     const start=toDate(period[1],period[2].toUpperCase(),2026), end=toDate(period[3],period[4].toUpperCase(),2026);
     const startBalance=money(totals[1]), totalOut=money(totals[2]), totalIn=money(totals[3]), endBalance=money(totals[4]);
