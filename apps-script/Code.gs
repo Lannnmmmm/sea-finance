@@ -121,93 +121,37 @@ function doGet() {
  * Payload: {reference, periodStart, periodEnd, openingBalance,
  *           totalOutgoing, totalIncoming, endingBalance, transactions[]}
  */
-function importStatement(payload) {
-  validateImportPayload_(payload);
-
-  const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
-  try {
-    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
-    const txSheet = ss.getSheetByName(CONFIG.TRANSACTIONS_SHEET);
-    const historySheet = ss.getSheetByName(CONFIG.IMPORT_HISTORY_SHEET);
-    if (!txSheet || !historySheet) {
-      throw new Error('Jalankan setupSeaBankSheets() terlebih dahulu.');
-    }
-
-    const lastHistoryRow = historySheet.getLastRow();
-    if (lastHistoryRow > 1) {
-      const refs = historySheet.getRange(2, 1, lastHistoryRow - 1, 1)
-        .getDisplayValues().flat();
-      if (refs.includes(payload.reference)) {
-        throw new Error('Statement sudah pernah diimpor: ' + payload.reference);
-      }
-    }
-
-    const rows = payload.transactions.map(t => [
-      payload.reference,
-      t.date,
-      t.transaction || '',
-      t.transactionType || '',
-      t.account || '',
-      Number(t.outgoing || 0),
-      Number(t.incoming || 0),
-      Number(t.endingBalance),
-      ''
-    ]);
-
-    if (rows.length !== payload.transactions.length || !rows.length) {
-      throw new Error('Data transaksi kosong atau tidak valid.');
-    }
-
-    const startRow = txSheet.getLastRow() + 1;
-    txSheet.getRange(startRow, 1, rows.length, CONFIG.TRANSACTION_HEADERS.length)
-      .setValues(rows);
-
-    historySheet.appendRow([
-      payload.reference,
-      payload.periodStart,
-      payload.periodEnd,
-      rows.length,
-      new Date(),
-      'SUCCESS',
-      'Totals and ending balance matched'
-    ]);
-
-    return {success: true, reference: payload.reference, imported: rows.length};
-  } finally {
-    lock.releaseLock();
-  }
+function importStatements(payload) {
+  if(!payload||!Array.isArray(payload.statements)||!payload.statements.length)throw new Error('Tidak ada statement untuk diimpor.');
+  payload.statements.forEach(validateImportPayload_);
+  const lock=LockService.getScriptLock(); lock.waitLock(30000);
+  try{
+    const ss=SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID), txSheet=ss.getSheetByName(CONFIG.TRANSACTIONS_SHEET), historySheet=ss.getSheetByName(CONFIG.IMPORT_HISTORY_SHEET);
+    if(!txSheet||!historySheet)throw new Error('Jalankan setupSeaBankSheets() terlebih dahulu.');
+    const last=historySheet.getLastRow(), existing=last>1?historySheet.getRange(2,1,last-1,1).getDisplayValues().flat():[];
+    const refs=payload.statements.map(s=>s.reference), duplicates=refs.filter((r,i)=>refs.indexOf(r)!==i||existing.includes(r));
+    if(duplicates.length)throw new Error('Statement duplikat: '+[...new Set(duplicates)].join(', ')+'. Tidak ada data yang disimpan.');
+    const rows=[], histories=[];
+    payload.statements.forEach(s=>{
+      s.transactions.forEach(t=>rows.push([s.reference,t.date,t.transaction||'',t.transactionType||'',t.account||'',Number(t.outgoing||0),Number(t.incoming||0),Number(t.endingBalance),'']));
+      histories.push([s.reference,s.periodStart,s.periodEnd,s.transactions.length,new Date(),'SUCCESS','Totals, ending balance and running balance matched']);
+    });
+    if(!rows.length)throw new Error('Data transaksi kosong.');
+    txSheet.getRange(txSheet.getLastRow()+1,1,rows.length,CONFIG.TRANSACTION_HEADERS.length).setValues(rows);
+    historySheet.getRange(historySheet.getLastRow()+1,1,histories.length,CONFIG.IMPORT_HISTORY_HEADERS.length).setValues(histories);
+    return {success:true,imported:rows.length,statements:histories.length};
+  }finally{lock.releaseLock();}
 }
-
 function validateImportPayload_(p) {
-  if (!p || !/^S\\d{2}-\\d{6}[A-Z0-9]{8}$/.test(String(p.reference || ''))) {
-    throw new Error('Nomor reference statement tidak valid.');
-  }
-  if (!Array.isArray(p.transactions) || !p.transactions.length) {
-    throw new Error('Tidak ada transaksi untuk diimpor.');
-  }
-
-  const money = n => Number(n);
-  const outgoing = p.transactions.reduce((s, t) => s + money(t.outgoing || 0), 0);
-  const incoming = p.transactions.reduce((s, t) => s + money(t.incoming || 0), 0);
-  const last = p.transactions[p.transactions.length - 1];
-
-  if (outgoing !== money(p.totalOutgoing)) {
-    throw new Error('Validasi gagal: total outgoing tidak cocok dengan PDF.');
-  }
-  if (incoming !== money(p.totalIncoming)) {
-    throw new Error('Validasi gagal: total incoming tidak cocok dengan PDF.');
-  }
-  if (money(last.endingBalance) !== money(p.endingBalance)) {
-    throw new Error('Validasi gagal: saldo akhir transaksi tidak cocok.');
-  }
-
-  let previous = money(p.openingBalance);
-  p.transactions.forEach((t, i) => {
-    const expected = previous - money(t.outgoing || 0) + money(t.incoming || 0);
-    if (expected !== money(t.endingBalance)) {
-      throw new Error('Validasi saldo berjalan gagal pada transaksi ke-' + (i + 1));
-    }
-    previous = money(t.endingBalance);
+  if(!p||!/^S\\d{2}-\\d{6}[A-Z0-9]{8}$/.test(String(p.reference||'')))throw new Error('Nomor reference statement tidak valid: '+(p&&p.reference||''));
+  if(!Array.isArray(p.transactions)||!p.transactions.length)throw new Error('Tidak ada transaksi: '+p.reference);
+  p.transactions.forEach((t,i)=>{
+    if(!/^2026-\\d{2}-\\d{2}$/.test(String(t.date||''))||!Number.isFinite(Number(t.outgoing||0))||!Number.isFinite(Number(t.incoming||0))||!Number.isFinite(Number(t.endingBalance))||Number(t.outgoing||0)<0||Number(t.incoming||0)<0)throw new Error('Data transaksi tidak valid pada '+p.reference+', baris '+(i+1));
   });
+  const outgoing=p.transactions.reduce((s,t)=>s+Number(t.outgoing||0),0), incoming=p.transactions.reduce((s,t)=>s+Number(t.incoming||0),0), last=p.transactions[p.transactions.length-1];
+  if(outgoing!==Number(p.totalOutgoing))throw new Error('Total outgoing tidak cocok: '+p.reference);
+  if(incoming!==Number(p.totalIncoming))throw new Error('Total incoming tidak cocok: '+p.reference);
+  if(Number(last.endingBalance)!==Number(p.endingBalance))throw new Error('Saldo akhir tidak cocok: '+p.reference);
+  let previous=Number(p.openingBalance);
+  p.transactions.forEach((t,i)=>{const expected=previous-Number(t.outgoing||0)+Number(t.incoming||0);if(expected!==Number(t.endingBalance))throw new Error('Saldo berjalan gagal pada '+p.reference+', transaksi ke-'+(i+1));previous=Number(t.endingBalance);});
 }
