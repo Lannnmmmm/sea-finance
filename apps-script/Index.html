@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    body{font:14px Arial,sans-serif;max-width:1100px;margin:28px auto;padding:0 16px;color:#202124}
+    h2{margin-bottom:6px} .muted{color:#666}.panel{border:1px solid #ddd;border-radius:10px;padding:16px;margin:16px 0}
+    button{padding:9px 15px;border:0;border-radius:6px;background:#1769aa;color:white;cursor:pointer}
+    button:disabled{opacity:.5;cursor:default} input{margin:10px 0}
+    table{border-collapse:collapse;width:100%;font-size:12px} th,td{border:1px solid #ddd;padding:6px;text-align:left}
+    th{background:#f3f5f7;position:sticky;top:0}.scroll{max-height:420px;overflow:auto}
+    .ok{color:#137333}.bad{color:#b3261e} .stats{display:flex;gap:18px;flex-wrap:wrap}
+  </style>
+</head>
+<body>
+  <h2>SeaBank PDF Importer</h2>
+  <div class="muted">Pilih e-Statement PDF. Data hanya dipreview, belum disimpan sampai validasi berhasil.</div>
+  <div class="panel">
+    <input id="pdfFile" type="file" accept="application/pdf">
+    <button id="readBtn" onclick="readPdf()">Baca PDF & Preview</button>
+    <div id="status" class="muted"></div>
+  </div>
+  <div id="summary" class="panel" hidden></div>
+  <div class="panel">
+    <div class="stats"><strong id="count">0 transaksi</strong><strong id="check"></strong></div>
+    <div class="scroll"><table><thead><tr>
+      <th>Tanggal</th><th>Transaction</th><th>Transaction Type</th><th>Account</th>
+      <th>Outgoing</th><th>Incoming</th><th>Ending Balance</th>
+    </tr></thead><tbody id="rows"></tbody></table></div>
+    <p><button id="saveBtn" onclick="saveStatement()" disabled>Simpan ke Google Sheets</button></p>
+  </div>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+let parsedStatement=null;
+
+function setStatus(s, bad=false){const e=document.getElementById('status');e.textContent=s;e.className=bad?'bad':'muted';}
+function money(s){return Number(String(s||'').replace(/[^0-9]/g,''))||0;}
+function clean(s){return String(s||'').replace(/\s+/g,' ').trim();}
+function monthNum(m){return ({JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11})[m] ?? -1;}
+function toDate(d,m,year){return new Date(year,monthNum(m),Number(d));}
+function dateText(dt){return UtilitiesDate(dt);}
+function UtilitiesDate(d){return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');}
+
+async function pageLines(page){
+  const content=await page.getTextContent();
+  const buckets=[];
+  content.items.forEach(it=>{
+    if(!it.str || !it.str.trim()) return;
+    const x=it.transform[4], y=it.transform[5];
+    let line=buckets.find(b=>Math.abs(b.y-y)<2.0);
+    if(!line){line={y,items:[]};buckets.push(line);}
+    line.items.push({x,text:it.str.trim()});
+  });
+  return buckets.sort((a,b)=>b.y-a.y).map(b=>{
+    b.items.sort((a,c)=>a.x-c.x);
+    return {y:b.y,items:b.items,text:clean(b.items.map(i=>i.text).join(' '))};
+  });
+}
+
+function isType(s){
+  return ['Transfer','Payment','Interest','Tax','Top Up - eWallet','Time Deposit'].includes(clean(s));
+}
+function accountCandidate(s){
+  const v=clean(s);
+  return /\b(BRI|BCA|BNI|MANDIRI|CIMB|DANAMON|PERMATA|BSI)\b.*\d{5,}/i.test(v) ||
+         /\b(DANA|GOPAY|OVO|SHOPEEPAY|LINKAJA)\b.*\d{8,}/i.test(v) ||
+         /\b\d{10,16}\b/.test(v);
+}
+function splitDesc(lines){
+  const desc=[], accounts=[];
+  lines.forEach(line=>{
+    const s=clean(line.text);
+    if(!s || /^(DATE|TRANSACTION|OUTGOING|INCOMING|END BALANCE|BANK STATEMENT|S\/N|page )/i.test(s)) return;
+    const nonAmount=line.items.filter(it=>it.x<280).map(it=>it.text).join(' ');
+    const candidate=clean(nonAmount);
+    if(!candidate) return;
+    if(accountCandidate(candidate)) accounts.push(candidate);
+    else desc.push(candidate);
+  });
+  return {transaction:clean(desc.join(' ')),account:clean(accounts.join(' '))};
+}
+function parsePage(lines, year, carry){
+  let active=false, stop=false;
+  const out=[];
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i], txt=line.text;
+    if(/TIME DEPOSIT - INTEREST & TAX DETAILS/i.test(txt)){stop=true;active=false;}
+    if(stop) continue;
+    if(/^DATE\b.*TRANSACTION/i.test(txt) || /^DATE\s+TRANSACTION/i.test(txt)) {active=true;continue;}
+    if(!active) continue;
+    const m=txt.match(/^(\d{1,2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/i);
+    if(!m) {
+      if(txt && !/^(page \d+|BANK STATEMENT|S\/N )/i.test(txt) && !isType(txt)) carry.pending.push(line);
+      if(isType(txt) && carry.current){
+        carry.current.transactionType=txt;
+        out.push(carry.current); carry.current=null; carry.pending=[];
+      }
+      continue;
+    }
+    const dt=toDate(m[1],m[2].toUpperCase(),year);
+    const descLines=carry.pending.concat([line]);
+    const parts=splitDesc(descLines);
+    const nums=line.items.filter(it=>it.x>=280 && /\d[\d.]*\d|^\d$/.test(it.text));
+    let outgoing=0,incoming=0,ending=0;
+    nums.forEach(it=>{
+      const val=money(it.text);
+      if(it.x>=485) ending=val;
+      else if(it.x>=390) incoming=val;
+      else if(it.x>=280) outgoing=val;
+    });
+    if(carry.current){out.push(carry.current);}
+    carry.current={
+      date:dateText(dt),transaction:parts.transaction,transactionType:'',
+      account:parts.account,outgoing,incoming,endingBalance:ending
+    };
+    carry.pending=[];
+  }
+  return out;
+}
+
+async function readPdf(){
+  const file=document.getElementById('pdfFile').files[0];
+  if(!file){setStatus('Pilih file PDF terlebih dahulu.',true);return;}
+  document.getElementById('readBtn').disabled=true;
+  document.getElementById('saveBtn').disabled=true;
+  parsedStatement=null; setStatus('Membaca PDF...');
+  try{
+    const bytes=new Uint8Array(await file.arrayBuffer());
+    const pdf=await pdfjsLib.getDocument({data:bytes}).promise;
+    let allLines=[], serial='', summaryText='', pageYear=2026;
+    for(let n=1;n<=pdf.numPages;n++){
+      const lines=await pageLines(await pdf.getPage(n));
+      allLines.push(...lines);
+      if(!serial){const hit=lines.map(x=>x.text).join(' ').match(/S\/N\s+(S\d-\d{6}[A-Z0-9]{8})/);if(hit)serial=hit[1];}
+      summaryText += '\n'+lines.map(x=>x.text).join('\n');
+    }
+    const period=summaryText.match(/(\d{2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+2026\s+to\s+(\d{2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+2026/i);
+    const opening=summaryText.match(/SAVINGS\s+[\d,.]+\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)/i);
+    const totals=summaryText.match(/SAVINGS\s+[\d,.]+\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)/i);
+    if(!serial || !period || !totals) throw new Error('Nomor statement atau ringkasan saldo tidak terbaca.');
+    const start=toDate(period[1],period[2].toUpperCase(),2026), end=toDate(period[3],period[4].toUpperCase(),2026);
+    const startBalance=money(totals[1]), totalOut=money(totals[2]), totalIn=money(totals[3]), endBalance=money(totals[4]);
+    const linesByPage=[];
+    for(let n=1;n<=pdf.numPages;n++) linesByPage.push(await pageLines(await pdf.getPage(n)));
+    const carry={pending:[],current:null}; let transactions=[];
+    linesByPage.forEach(lines=>{transactions.push(...parsePage(lines,2026,carry));});
+    if(carry.current) transactions.push(carry.current);
+    transactions=transactions.filter(t=>t.transactionType && t.endingBalance>0);
+    const sumOut=transactions.reduce((s,t)=>s+t.outgoing,0), sumIn=transactions.reduce((s,t)=>s+t.incoming,0);
+    const last=transactions[transactions.length-1];
+    const checks=[
+      ['Jumlah transaksi',transactions.length>0],
+      ['Total outgoing',sumOut===totalOut],
+      ['Total incoming',sumIn===totalIn],
+      ['Saldo akhir',!!last && last.endingBalance===endBalance]
+    ];
+    const valid=checks.every(c=>c[1]);
+    parsedStatement={reference:serial,periodStart:dateText(start),periodEnd:dateText(end),
+      openingBalance:startBalance,totalOutgoing:totalOut,totalIncoming:totalIn,
+      endingBalance:endBalance,transactions};
+    document.getElementById('summary').hidden=false;
+    document.getElementById('summary').innerHTML='<b>'+serial+'</b><p>'+dateText(start)+' s.d. '+dateText(end)+'</p>'+
+      '<div class="stats"><span>Transaksi: '+transactions.length+'</span><span>Keluar: '+sumOut.toLocaleString('id-ID')+'</span><span>Masuk: '+sumIn.toLocaleString('id-ID')+'</span><span>Saldo akhir: '+endBalance.toLocaleString('id-ID')+'</span></div>'+
+      '<p class="'+(valid?'ok':'bad')+'">'+checks.map(c=>(c[1]?'✓ ':'✗ ')+c[0]).join(' | ')+'</p>';
+    document.getElementById('count').textContent=transactions.length+' transaksi';
+    document.getElementById('check').textContent=valid?'Validasi ringkasan lolos':'Validasi belum lolos';
+    document.getElementById('check').className=valid?'ok':'bad';
+    document.getElementById('rows').innerHTML=transactions.map(t=>'<tr><td>'+t.date+'</td><td>'+esc(t.transaction)+'</td><td>'+esc(t.transactionType)+'</td><td>'+esc(t.account)+'</td><td>'+fmt(t.outgoing)+'</td><td>'+fmt(t.incoming)+'</td><td>'+fmt(t.endingBalance)+'</td></tr>').join('');
+    document.getElementById('saveBtn').disabled=!valid;
+    setStatus(valid?'Preview selesai. Periksa data sebelum menyimpan.':'Parser membaca PDF, tetapi validasi gagal. Jangan simpan.',!valid);
+    if(!valid) parsedStatement=null;
+  }catch(e){setStatus(e.message||String(e),true);}
+  finally{document.getElementById('readBtn').disabled=false;}
+}
+function fmt(n){return Number(n||0).toLocaleString('id-ID');}
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function saveStatement(){
+  if(!parsedStatement)return;
+  document.getElementById('saveBtn').disabled=true;
+  setStatus('Menyimpan transaksi...');
+  google.script.run.withSuccessHandler(r=>{
+    setStatus('Berhasil menyimpan '+r.imported+' transaksi ('+r.reference+').');
+  }).withFailureHandler(e=>{
+    setStatus(e.message||String(e),true);document.getElementById('saveBtn').disabled=false;
+  }).importStatement(parsedStatement);
+}
+</script>
+</body>
+</html>
