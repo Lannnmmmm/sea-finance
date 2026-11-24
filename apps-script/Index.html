@@ -72,7 +72,7 @@ function splitDesc(lines){
   const desc=[], accounts=[], candidates=[];
   lines.forEach(line=>{
     const s=clean(line.text);
-    if(!s || /^(DATE|TRANSACTION|OUTGOING|INCOMING|END BALANCE|BANK STATEMENT|S\\/N|page )/i.test(s)) return;
+    if(!s || /^(DATE|TRANSACTION|OUTGOING|INCOMING|END BALANCE|BANK STATEMENT|S\/N|page )/i.test(s)) return;
     const candidate=clean(line.items.filter(it=>it.x>=130 && it.x<280).map(it=>it.text).join(' '));
     if(candidate) candidates.push(candidate);
   });
