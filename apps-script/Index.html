@@ -60,7 +60,7 @@ async function pageLines(page){
 }
 
 function isType(s){
-  return ['Transfer','Payment','Interest','Tax','Top Up - eWallet','Time Deposit'].includes(clean(s));
+  return ['Transfer','Payment','Interest','Tax','Top Up - eWallet','Time Deposit','Reward','Adjustment','Bill - PDAM'].includes(clean(s));
 }
 function accountCandidate(s){
   const v=clean(s);
