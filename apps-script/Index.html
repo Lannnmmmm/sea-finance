@@ -120,59 +120,49 @@ function parsePage(lines, year, carry){
   return out;
 }
 
+function parseStatementGroup(reference, pages) {
+  const firstText=pages[0].map(x=>x.text).join('\\n');
+  const period=firstText.match(/(\\d{2})\\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\\s+2026\\s+to\\s+(\\d{2})\\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\\s+2026/i);
+  const totals=firstText.match(/SAVINGS\\s+([\\d,.]+)\\s+([\\d,.]+)\\s+([\\d,.]+)\\s+([\\d,.]+)/i);
+  if(!period || !totals) throw new Error('Ringkasan tidak terbaca untuk '+reference);
+  const startDate=toDate(period[1],period[2].toUpperCase(),2026), endDate=toDate(period[3],period[4].toUpperCase(),2026);
+  const openingBalance=money(totals[1]), totalOutgoing=money(totals[2]), totalIncoming=money(totals[3]), endingBalance=money(totals[4]);
+  const carry={pending:[],current:null}; let transactions=[];
+  pages.forEach(lines=>{transactions.push(...parsePage(lines,2026,carry));});
+  if(carry.current) transactions.push(carry.current);
+  transactions=transactions.filter(t=>t.transactionType && t.endingBalance>0);
+  const sumOut=transactions.reduce((s,t)=>s+t.outgoing,0), sumIn=transactions.reduce((s,t)=>s+t.incoming,0);
+  const last=transactions[transactions.length-1]; let running=openingBalance, runningValid=true;
+  transactions.forEach(t=>{if(running-t.outgoing+t.incoming!==t.endingBalance) runningValid=false; running=t.endingBalance;});
+  const checks=[['Jumlah transaksi',transactions.length>0],['Total outgoing',sumOut===totalOutgoing],['Total incoming',sumIn===totalIncoming],['Saldo akhir',!!last&&last.endingBalance===endingBalance],['Saldo berjalan',runningValid]];
+  return {reference,periodStart:dateText(startDate),periodEnd:dateText(endDate),openingBalance,totalOutgoing,totalIncoming,endingBalance,transactions,sumOutgoing:sumOut,sumIncoming:sumIn,checks,valid:checks.every(c=>c[1])};
+}
 async function readPdf(){
   const file=document.getElementById('pdfFile').files[0];
   if(!file){setStatus('Pilih file PDF terlebih dahulu.',true);return;}
-  document.getElementById('readBtn').disabled=true;
-  document.getElementById('saveBtn').disabled=true;
-  parsedStatement=null; setStatus('Membaca PDF...');
+  document.getElementById('readBtn').disabled=true; document.getElementById('saveBtn').disabled=true; parsedStatement=null; setStatus('Membaca PDF...');
   try{
-    const bytes=new Uint8Array(await file.arrayBuffer());
-    const pdf=await pdfjsLib.getDocument({data:bytes}).promise;
-    let allLines=[], serial='', summaryText='', pageYear=2026;
+    const pdf=await pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+    const groups=new Map();
     for(let n=1;n<=pdf.numPages;n++){
       const lines=await pageLines(await pdf.getPage(n));
-      allLines.push(...lines);
-      if(!serial){const hit=lines.map(x=>x.text).join(' ').match(/S\/N\s+(S\d{2}-\d{6}[A-Z0-9]{8})/);if(hit)serial=hit[1];}
-      summaryText += '\n'+lines.map(x=>x.text).join('\n');
+      const hit=lines.map(x=>x.text).join(' ').match(/S\\/N\\s+(S\\d{2}-\\d{6}[A-Z0-9]{8})/);
+      if(hit){if(!groups.has(hit[1]))groups.set(hit[1],[]);groups.get(hit[1]).push(lines);}
     }
-    const period=summaryText.match(/(\d{2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+2026\s+to\s+(\d{2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+2026/i);
-    const opening=summaryText.match(/SAVINGS\s+[\d,.]+\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)/i);
-    const totals=summaryText.match(/\bSAVINGS\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)/i);
-    if(!serial || !period || !totals) throw new Error('Nomor statement atau ringkasan saldo tidak terbaca.');
-    const start=toDate(period[1],period[2].toUpperCase(),2026), end=toDate(period[3],period[4].toUpperCase(),2026);
-    const startBalance=money(totals[1]), totalOut=money(totals[2]), totalIn=money(totals[3]), endBalance=money(totals[4]);
-    const linesByPage=[];
-    for(let n=1;n<=pdf.numPages;n++) linesByPage.push(await pageLines(await pdf.getPage(n)));
-    const carry={pending:[],current:null}; let transactions=[];
-    linesByPage.forEach(lines=>{transactions.push(...parsePage(lines,2026,carry));});
-    if(carry.current) transactions.push(carry.current);
-    transactions=transactions.filter(t=>t.transactionType && t.endingBalance>0);
-    const sumOut=transactions.reduce((s,t)=>s+t.outgoing,0), sumIn=transactions.reduce((s,t)=>s+t.incoming,0);
-    const last=transactions[transactions.length-1];
-    const checks=[
-      ['Jumlah transaksi',transactions.length>0],
-      ['Total outgoing',sumOut===totalOut],
-      ['Total incoming',sumIn===totalIn],
-      ['Saldo akhir',!!last && last.endingBalance===endBalance]
-    ];
-    const valid=checks.every(c=>c[1]);
-    parsedStatement={reference:serial,periodStart:dateText(start),periodEnd:dateText(end),
-      openingBalance:startBalance,totalOutgoing:totalOut,totalIncoming:totalIn,
-      endingBalance:endBalance,transactions};
+    if(!groups.size)throw new Error('Nomor statement tidak ditemukan di PDF.');
+    const statements=[...groups.entries()].map(([ref,pages])=>parseStatementGroup(ref,pages)).sort((a,b)=>a.periodStart.localeCompare(b.periodStart));
+    const totalTx=statements.reduce((s,x)=>s+x.transactions.length,0), allValid=statements.every(x=>x.valid);
+    parsedStatement={statements};
     document.getElementById('summary').hidden=false;
-    document.getElementById('summary').innerHTML='<b>'+serial+'</b><p>'+dateText(start)+' s.d. '+dateText(end)+'</p>'+
-      '<div class="stats"><span>Transaksi: '+transactions.length+'</span><span>Keluar: '+sumOut.toLocaleString('id-ID')+'</span><span>Masuk: '+sumIn.toLocaleString('id-ID')+'</span><span>Saldo akhir: '+endBalance.toLocaleString('id-ID')+'</span></div>'+
-      '<p class="'+(valid?'ok':'bad')+'">'+checks.map(c=>(c[1]?'✓ ':'✗ ')+c[0]).join(' | ')+'</p>';
-    document.getElementById('count').textContent=transactions.length+' transaksi';
-    document.getElementById('check').textContent=valid?'Validasi ringkasan lolos':'Validasi belum lolos';
-    document.getElementById('check').className=valid?'ok':'bad';
-    document.getElementById('rows').innerHTML=transactions.map(t=>'<tr><td>'+t.date+'</td><td>'+esc(t.transaction)+'</td><td>'+esc(t.transactionType)+'</td><td>'+esc(t.account)+'</td><td>'+fmt(t.outgoing)+'</td><td>'+fmt(t.incoming)+'</td><td>'+fmt(t.endingBalance)+'</td></tr>').join('');
-    document.getElementById('saveBtn').disabled=!valid;
-    setStatus(valid?'Preview selesai. Periksa data sebelum menyimpan.':'Parser membaca PDF, tetapi validasi gagal. Jangan simpan.',!valid);
-    if(!valid) parsedStatement=null;
-  }catch(e){setStatus(e.message||String(e),true);}
-  finally{document.getElementById('readBtn').disabled=false;}
+    document.getElementById('summary').innerHTML='<b>'+statements.length+' statement ditemukan</b>'+statements.map(s=>'<div style="border-top:1px solid #ddd;padding:9px 0"><b>'+s.reference+'</b> · '+s.periodStart+' s.d. '+s.periodEnd+'<div class="stats"><span>Transaksi: '+s.transactions.length+'</span><span>Keluar: '+fmt(s.sumOutgoing)+'</span><span>Masuk: '+fmt(s.sumIncoming)+'</span><span>Saldo akhir: '+fmt(s.endingBalance)+'</span></div><p class="'+(s.valid?'ok':'bad')+'">'+s.checks.map(c=>(c[1]?'✓ ':'✗ ')+c[0]).join(' | ')+'</p></div>').join('');
+    document.getElementById('count').textContent=totalTx+' transaksi dari '+statements.length+' statement';
+    document.getElementById('check').textContent=allValid?'Semua validasi lolos':'Ada statement yang belum valid'; document.getElementById('check').className=allValid?'ok':'bad';
+    const preview=statements.flatMap(s=>s.transactions);
+    document.getElementById('rows').innerHTML=preview.map(t=>'<tr><td>'+t.date+'</td><td>'+esc(t.transaction)+'</td><td>'+esc(t.transactionType)+'</td><td>'+esc(t.account)+'</td><td>'+fmt(t.outgoing)+'</td><td>'+fmt(t.incoming)+'</td><td>'+fmt(t.endingBalance)+'</td></tr>').join('');
+    document.getElementById('saveBtn').disabled=!allValid;
+    setStatus(allValid?'Preview selesai. Periksa seluruh statement sebelum menyimpan.':'Validasi gagal pada satu atau beberapa statement. Jangan simpan.',!allValid);
+    if(!allValid)parsedStatement=null;
+  }catch(e){setStatus(e.message||String(e),true);}finally{document.getElementById('readBtn').disabled=false;}
 }
 function fmt(n){return Number(n||0).toLocaleString('id-ID');}
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -184,7 +174,7 @@ function saveStatement(){
     setStatus('Berhasil menyimpan '+r.imported+' transaksi ('+r.reference+').');
   }).withFailureHandler(e=>{
     setStatus(e.message||String(e),true);document.getElementById('saveBtn').disabled=false;
-  }).importStatement(parsedStatement);
+  }).importStatements(parsedStatement);
 }
 </script>
 </body>
