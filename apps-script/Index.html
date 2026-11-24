@@ -133,7 +133,7 @@ async function readPdf(){
     for(let n=1;n<=pdf.numPages;n++){
       const lines=await pageLines(await pdf.getPage(n));
       allLines.push(...lines);
-      if(!serial){const hit=lines.map(x=>x.text).join(' ').match(/S\/N\s+(S\d-\d{6}[A-Z0-9]{8})/);if(hit)serial=hit[1];}
+      if(!serial){const hit=lines.map(x=>x.text).join(' ').match(/S\/N\s+(S\d{2}-\d{6}[A-Z0-9]{8})/);if(hit)serial=hit[1];}
       summaryText += '\n'+lines.map(x=>x.text).join('\n');
     }
     const period=summaryText.match(/(\d{2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+2026\s+to\s+(\d{2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+2026/i);
