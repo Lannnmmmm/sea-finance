@@ -180,7 +180,7 @@ function importStatement(payload) {
 }
 
 function validateImportPayload_(p) {
-  if (!p || !/^S\\d-\\d{6}[A-Z0-9]{8}$/.test(String(p.reference || ''))) {
+  if (!p || !/^S\\d{2}-\\d{6}[A-Z0-9]{8}$/.test(String(p.reference || ''))) {
     throw new Error('Nomor reference statement tidak valid.');
   }
   if (!Array.isArray(p.transactions) || !p.transactions.length) {
