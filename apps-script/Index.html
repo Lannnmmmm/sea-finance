@@ -69,16 +69,24 @@ function accountCandidate(s){
          /\b\d{10,16}\b/.test(v);
 }
 function splitDesc(lines){
-  const desc=[], accounts=[];
+  const desc=[], accounts=[], candidates=[];
   lines.forEach(line=>{
     const s=clean(line.text);
-    if(!s || /^(DATE|TRANSACTION|OUTGOING|INCOMING|END BALANCE|BANK STATEMENT|S\/N|page )/i.test(s)) return;
-    const nonAmount=line.items.filter(it=>it.x>=130 && it.x<280).map(it=>it.text).join(' ');
-    const candidate=clean(nonAmount);
-    if(!candidate) return;
-    if(accountCandidate(candidate)) accounts.push(candidate);
-    else desc.push(candidate);
+    if(!s || /^(DATE|TRANSACTION|OUTGOING|INCOMING|END BALANCE|BANK STATEMENT|S\\/N|page )/i.test(s)) return;
+    const candidate=clean(line.items.filter(it=>it.x>=130 && it.x<280).map(it=>it.text).join(' '));
+    if(candidate) candidates.push(candidate);
   });
+  for(let i=0;i<candidates.length;i++){
+    const value=candidates[i];
+    if(/^(BRI|BCA|BNI|MANDIRI|CIMB|DANAMON|PERMATA|BSI|DANA|GOPAY|OVO|SHOPEEPAY|LINKAJA)$/i.test(value) &&
+       i+1<candidates.length && /^\\d{5,16}$/.test(candidates[i+1])){
+      accounts.push(value+' '+candidates[++i]);
+    } else if(accountCandidate(value)) {
+      accounts.push(value);
+    } else {
+      desc.push(value);
+    }
+  }
   return {transaction:clean(desc.join(' ')),account:clean(accounts.join(' '))};
 }
 function parsePage(lines, year, carry){
